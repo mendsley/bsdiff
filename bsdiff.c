@@ -31,12 +31,48 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 #include <sys/types.h>
 
 #include <bzlib.h>
-#include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#if defined(__linux__)
+#include <err.h>
+#else
+static int err(int eval, const char* fmt, ...)
+{
+	const char* errortext;
+	char* strp;
+	va_list args;
+
+	errortext = strerror(errno);
+	if (fmt != NULL || strcmp(fmt,"") != 0) {
+		strp = (char*)malloc(1024 * sizeof(char));
+		va_start(args, fmt);
+		vsnprintf(strp, 1023, fmt, args);
+		va_end(args);
+		fprintf(stderr, "%s: %s\b", strp, errortext);
+		free(strp);
+	} else {
+		fprintf(stderr, "%s\n", errortext);
+	}
+
+	exit(eval);
+	return 0;
+}
+
+static int errx(int eval, const char* fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+
+	exit(eval);
+	return 0;
+}
+#endif
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
