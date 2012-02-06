@@ -193,11 +193,8 @@ static void offtout(off_t x,u_char *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-int main(int argc,char *argv[])
+int bsdiff(u_char* old, off_t oldsize, u_char* new, off_t newsize, FILE* pf)
 {
-	int fd;
-	u_char *old,*new;
-	off_t oldsize,newsize;
 	off_t *I,*V;
 	off_t scan,pos,len;
 	off_t lastscan,lastpos,lastoffset;
@@ -209,20 +206,9 @@ int main(int argc,char *argv[])
 	u_char *db,*eb;
 	u_char buf[8];
 	u_char header[32];
-	FILE * pf;
 	BZFILE * pfbz2;
 	int bz2err;
 
-	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
-
-	/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
-		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
-		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
-		((old=malloc(oldsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[1]);
 
 	if(((I=malloc((oldsize+1)*sizeof(off_t)))==NULL) ||
 		((V=malloc((oldsize+1)*sizeof(off_t)))==NULL)) err(1,NULL);
@@ -230,24 +216,10 @@ int main(int argc,char *argv[])
 	qsufsort(I,V,old,oldsize);
 
 	free(V);
-
-	/* Allocate newsize+1 bytes instead of newsize bytes to ensure
-		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[2],O_RDONLY,0))<0) ||
-		((newsize=lseek(fd,0,SEEK_END))==-1) ||
-		((new=malloc(newsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,new,newsize)!=newsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[2]);
-
 	if(((db=malloc(newsize+1))==NULL) ||
 		((eb=malloc(newsize+1))==NULL)) err(1,NULL);
 	dblen=0;
 	eblen=0;
-
-	/* Create the patch file */
-	if ((pf = fopen(argv[3], "w")) == NULL)
-		err(1, "%s", argv[3]);
 
 	/* Header is
 		0	8	 "BSDIFF40"
@@ -264,7 +236,7 @@ int main(int argc,char *argv[])
 	offtout(0, header + 16);
 	offtout(newsize, header + 24);
 	if (fwrite(header, 32, 1, pf) != 1)
-		err(1, "fwrite(%s)", argv[3]);
+		err(1, "fwrite(%s)", "patch");
 
 	/* Compute the differences, writing ctrl as we go */
 	if ((pfbz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)) == NULL)
@@ -389,14 +361,55 @@ int main(int argc,char *argv[])
 	if (fseeko(pf, 0, SEEK_SET))
 		err(1, "fseeko");
 	if (fwrite(header, 32, 1, pf) != 1)
-		err(1, "fwrite(%s)", argv[3]);
-	if (fclose(pf))
-		err(1, "fclose");
+		err(1, "fwrite(%s)", "patch");
 
 	/* Free the memory we used */
 	free(db);
 	free(eb);
 	free(I);
+
+	return 0;
+}
+
+int main(int argc,char *argv[])
+{
+	int fd;
+	u_char *old,*new;
+	off_t oldsize,newsize;
+	FILE * pf;
+
+	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
+
+	/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
+		that we never try to malloc(0) and get a NULL pointer */
+	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
+		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
+		((old=malloc(oldsize+1))==NULL) ||
+		(lseek(fd,0,SEEK_SET)!=0) ||
+		(read(fd,old,oldsize)!=oldsize) ||
+		(close(fd)==-1)) err(1,"%s",argv[1]);
+
+
+	/* Allocate newsize+1 bytes instead of newsize bytes to ensure
+		that we never try to malloc(0) and get a NULL pointer */
+	if(((fd=open(argv[2],O_RDONLY,0))<0) ||
+		((newsize=lseek(fd,0,SEEK_END))==-1) ||
+		((new=malloc(newsize+1))==NULL) ||
+		(lseek(fd,0,SEEK_SET)!=0) ||
+		(read(fd,new,newsize)!=newsize) ||
+		(close(fd)==-1)) err(1,"%s",argv[2]);
+
+	/* Create the patch file */
+	if ((pf = fopen(argv[3], "w")) == NULL)
+		err(1, "%s", argv[3]);
+
+	if (bsdiff(old, oldsize, new, newsize, pf))
+		err(1, "bsdiff");
+
+	if (fclose(pf))
+		err(1, "fclose");
+
+	/* Free the memory we used */
 	free(old);
 	free(new);
 
