@@ -50,43 +50,6 @@ struct bsdiff_compressor
 	int (*finish)(struct bsdiff_compressor* compressor);
 };
 
-#if defined(__linux__)
-#include <err.h>
-#else
-static int err(int eval, const char* fmt, ...)
-{
-	const char* errortext;
-	char* strp;
-	va_list args;
-
-	errortext = strerror(errno);
-	if (fmt != NULL || strcmp(fmt,"") != 0) {
-		strp = (char*)malloc(1024 * sizeof(char));
-		va_start(args, fmt);
-		vsnprintf(strp, 1023, fmt, args);
-		va_end(args);
-		fprintf(stderr, "%s: %s\b", strp, errortext);
-		free(strp);
-	} else {
-		fprintf(stderr, "%s\n", errortext);
-	}
-
-	exit(eval);
-	return 0;
-}
-
-static int errx(int eval, const char* fmt, ...)
-{
-	va_list args;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-
-	exit(eval);
-	return 0;
-}
-#endif
-
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
 static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
@@ -257,13 +220,13 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	uint8_t buf[8 * 3];
 
 	if(((I=malloc((oldsize+1)*sizeof(int64_t)))==NULL) ||
-		((V=malloc((oldsize+1)*sizeof(int64_t)))==NULL)) err(1,NULL);
+		((V=malloc((oldsize+1)*sizeof(int64_t)))==NULL)) return -1;
 
 	qsufsort(I,V,old,oldsize);
 
 	free(V);
 	if(((db=malloc(newsize+1))==NULL) ||
-		((eb=malloc(newsize+1))==NULL)) err(1,NULL);
+		((eb=malloc(newsize+1))==NULL)) return -1;
 	dblen=0;
 	eblen=0;
 	filelen=0;
@@ -352,7 +315,7 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 
 			compresslen = compressor->write(compressor, buf, sizeof(buf));
 			if (compresslen == -1)
-				errx(1, "compressor->write");
+				return -1;
 			filelen += compresslen;
 
 			lastscan=scan-lenb;
@@ -362,7 +325,7 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	};
 	compresslen = compressor->finish(compressor);
 	if (compresslen == -1)
-		errx(1, "compressor->finish");
+		return -1;
 	filelen += compresslen;
 
 	/* Compute size of compressed ctrl data */
@@ -371,11 +334,11 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	/* Write compressed diff data */
 	compresslen = compressor->write(compressor, db, dblen);
 	if (compresslen == -1)
-		errx(1, "compressor->write");
+		return -1;
 	filelen += compresslen;
 	compresslen = compressor->finish(compressor);
 	if (compresslen == -1)
-		errx(1, "compressor->finish");
+		return -1;
 	filelen += compresslen;
 
 	/* Compute size of compressed diff data */
@@ -384,10 +347,10 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	/* Write compressed extra data */
 	compresslen = compressor->write(compressor, eb, eblen);
 	if (compresslen == -1)
-		errx(1, "compressor->write");
+		return -1;
 	compresslen = compressor->finish(compressor);
 	if (compresslen == -1)
-		errx(1, "compressor->finish");
+		return -1;
 
 	/* Free the memory we used */
 	free(db);
@@ -402,6 +365,7 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 #include <sys/types.h>
 
 #include <bzlib.h>
+#include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
