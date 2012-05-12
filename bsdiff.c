@@ -305,7 +305,7 @@ static int finishcompress(bz_stream* bz2, FILE* pf)
 int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, struct bsdiff_header* header)
 {
 	off_t *I,*V;
-	off_t scan,pos,len;
+	off_t scan,pos,len,filelen;
 	off_t lastscan,lastpos,lastoffset;
 	off_t oldscore,scsc;
 	off_t s,Sf,lenf,Sb,lenb;
@@ -329,6 +329,7 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 		((eb=malloc(newsize+1))==NULL)) err(1,NULL);
 	dblen=0;
 	eblen=0;
+	filelen=0;
 
 	/* Header is
 		0	8	 "BSDIFF40"
@@ -419,11 +420,13 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 			bz2err = writecompress(&bz2, pf, buf, 8);
 			if (bz2err == -1)
 				errx(1, "writecompress");
+			filelen += bz2err;
 
 			offtout((pos-lenb)-(lastpos+lenf),buf);
 			bz2err = writecompress(&bz2, pf, buf, 8);
 			if (bz2err == -1)
 				errx(1, "writecompress");
+			filelen += bz2err;
 
 			lastscan=scan-lenb;
 			lastpos=pos-lenb;
@@ -433,11 +436,10 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	bz2err = finishcompress(&bz2, pf);
 	if (bz2err == -1)
 		errx(1, "finishcompress");
+	filelen += bz2err;
 
 	/* Compute size of compressed ctrl data */
-	if ((len = ftello(pf)) == -1)
-		err(1, "ftello64");
-	header->ctrl_block_length = len-32;
+	header->ctrl_block_length = filelen;
 
 	/* Write compressed diff data */
 	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
@@ -445,14 +447,14 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	bz2err = writecompress(&bz2, pf, db, dblen);
 	if (bz2err == -1)
 		errx(1, "writecompress");
+	filelen += bz2err;
 	bz2err = finishcompress(&bz2, pf);
 	if (bz2err == -1)
 		errx(1, "finishcompress");
+	filelen += bz2err;
 
 	/* Compute size of compressed diff data */
-	if ((newsize = ftello(pf)) == -1)
-		err(1, "ftello64");
-	header->diff_block_length = newsize - len;
+	header->diff_block_length = filelen - header->ctrl_block_length;
 
 	/* Write compressed extra data */
 	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
