@@ -28,8 +28,6 @@
 __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05 cperciva Exp $");
 #endif
 
-#include <sys/types.h>
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,9 +89,9 @@ static int errx(int eval, const char* fmt, ...)
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
-static void split(off_t *I,off_t *V,off_t start,off_t len,off_t h)
+static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 {
-	off_t i,j,k,x,tmp,jj,kk;
+	int64_t i,j,k,x,tmp,jj,kk;
 
 	if(len<16) {
 		for(k=start;k<start+len;k+=j) {
@@ -152,10 +150,10 @@ static void split(off_t *I,off_t *V,off_t start,off_t len,off_t h)
 	if(start+len>kk) split(I,V,kk,start+len-kk,h);
 }
 
-static void qsufsort(off_t *I,off_t *V,uint8_t *old,off_t oldsize)
+static void qsufsort(int64_t *I,int64_t *V,uint8_t *old,int64_t oldsize)
 {
-	off_t buckets[256];
-	off_t i,h,len;
+	int64_t buckets[256];
+	int64_t i,h,len;
 
 	for(i=0;i<256;i++) buckets[i]=0;
 	for(i=0;i<oldsize;i++) buckets[old[i]]++;
@@ -190,9 +188,9 @@ static void qsufsort(off_t *I,off_t *V,uint8_t *old,off_t oldsize)
 	for(i=0;i<oldsize+1;i++) I[V[i]]=i;
 }
 
-static off_t matchlen(uint8_t *old,off_t oldsize,uint8_t *new,off_t newsize)
+static int64_t matchlen(uint8_t *old,int64_t oldsize,uint8_t *new,int64_t newsize)
 {
-	off_t i;
+	int64_t i;
 
 	for(i=0;(i<oldsize)&&(i<newsize);i++)
 		if(old[i]!=new[i]) break;
@@ -200,10 +198,10 @@ static off_t matchlen(uint8_t *old,off_t oldsize,uint8_t *new,off_t newsize)
 	return i;
 }
 
-static off_t search(off_t *I,uint8_t *old,off_t oldsize,
-		uint8_t *new,off_t newsize,off_t st,off_t en,off_t *pos)
+static int64_t search(int64_t *I,uint8_t *old,int64_t oldsize,
+		uint8_t *new,int64_t newsize,int64_t st,int64_t en,int64_t *pos)
 {
-	off_t x,y;
+	int64_t x,y;
 
 	if(en-st<2) {
 		x=matchlen(old+I[st],oldsize-I[st],new,newsize);
@@ -226,9 +224,9 @@ static off_t search(off_t *I,uint8_t *old,off_t oldsize,
 	};
 }
 
-static void offtout(off_t x,uint8_t *buf)
+static void offtout(int64_t x,uint8_t *buf)
 {
-	off_t y;
+	int64_t y;
 
 	if(x<0) y=-x; else y=x;
 
@@ -244,22 +242,22 @@ static void offtout(off_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
+int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
 {
-	off_t *I,*V;
-	off_t scan,pos,len;
-	off_t compresslen, filelen;
-	off_t lastscan,lastpos,lastoffset;
-	off_t oldscore,scsc;
-	off_t s,Sf,lenf,Sb,lenb;
-	off_t overlap,Ss,lens;
-	off_t i;
-	off_t dblen,eblen;
+	int64_t *I,*V;
+	int64_t scan,pos,len;
+	int64_t compresslen, filelen;
+	int64_t lastscan,lastpos,lastoffset;
+	int64_t oldscore,scsc;
+	int64_t s,Sf,lenf,Sb,lenb;
+	int64_t overlap,Ss,lens;
+	int64_t i;
+	int64_t dblen,eblen;
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
-	if(((I=malloc((oldsize+1)*sizeof(off_t)))==NULL) ||
-		((V=malloc((oldsize+1)*sizeof(off_t)))==NULL)) err(1,NULL);
+	if(((I=malloc((oldsize+1)*sizeof(int64_t)))==NULL) ||
+		((V=malloc((oldsize+1)*sizeof(int64_t)))==NULL)) err(1,NULL);
 
 	qsufsort(I,V,old,oldsize);
 
@@ -400,6 +398,8 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, struct bsdi
 }
 
 #if !defined(BSDIFF_LIBRARY)
+
+#include <sys/types.h>
 
 #include <bzlib.h>
 #include <fcntl.h>
