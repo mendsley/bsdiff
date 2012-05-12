@@ -48,6 +48,14 @@ struct bsdiff_header
 
 typedef int (*bsdiff_write)(void* file, const void* buffer, int size);
 
+struct bsdiff_compressor
+{
+	void* opaque;
+
+	int (*write)(struct bsdiff_compressor* compresor, const void* buffer, int size);
+	int (*finish)(struct bsdiff_compressor* compressor);
+};
+
 #if defined(__linux__)
 #include <err.h>
 #else
@@ -240,71 +248,7 @@ static void offtout(off_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int writecompress(bz_stream* bz2, void* file, bsdiff_write writefn, const uint8_t* out, int size)
-{
-	int err;
-	int totalwritten;
-	char buffer[4096];
-
-	bz2->next_in = (char*)out;
-	bz2->avail_in = size;
-
-	totalwritten = 0;
-	for (;;)
-	{
-		bz2->next_out = buffer;
-		bz2->avail_out = sizeof(buffer);
-		if (BZ_RUN_OK != (err = BZ2_bzCompress(bz2, BZ_RUN)))
-			return -1;
-
-		if (bz2->avail_out < sizeof(buffer))
-		{
-			const int written = sizeof(buffer) - bz2->avail_out;
-			if (written != writefn(file, buffer, written))
-				return -1;
-
-			totalwritten += written;
-		}
-
-		if (bz2->avail_in == 0)
-			return totalwritten;
-	}
-}
-
-static int finishcompress(bz_stream* bz2, void* file, bsdiff_write writefn)
-{
-	int err;
-	int totalwritten;
-	char buffer[4096];
-
-	totalwritten = 0;
-	for (;;)
-	{
-		bz2->next_out = buffer;
-		bz2->avail_out = sizeof(buffer);
-
-		err = BZ2_bzCompress(bz2, BZ_FINISH);
-		if (BZ_FINISH_OK != err && BZ_STREAM_END != err)
-			return -1;
-
-		if (bz2->avail_out < sizeof(buffer))
-		{
-			const int written = sizeof(buffer) - bz2->avail_out;
-			if (written != writefn(file, buffer, written))
-				return -1;
-
-			totalwritten += written;
-		}
-
-		if (BZ_STREAM_END == err)
-			break;
-	}
-
-	BZ2_bzCompressEnd(bz2);
-	return totalwritten;
-}
-
-int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, void* file, bsdiff_write writefn, struct bsdiff_header* header)
+int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
 {
 	off_t *I,*V;
 	off_t scan,pos,len;
@@ -350,8 +294,6 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, void* file,
 	header->new_file_length = newsize;
 
 	/* Compute the differences, writing ctrl as we go */
-	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
-		errx(1, "BZ2_bzCompressInit, err = %d", bz2err);
 	scan=0;len=0;
 	lastscan=0;lastpos=0;lastoffset=0;
 	while(scan<newsize) {
@@ -418,48 +360,44 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, void* file,
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			bz2err = writecompress(&bz2, file, writefn, buf, sizeof(buf));
-			if (bz2err == -1)
-				errx(1, "writecompress");
-			filelen += bz2err;
+			compresslen = compressor->write(compressor, buf, sizeof(buf));
+			if (compresslen == -1)
+				errx(1, "compressor->write");
+			filelen += compresslen;
 
 			lastscan=scan-lenb;
 			lastpos=pos-lenb;
 			lastoffset=pos-scan;
 		};
 	};
-	bz2err = finishcompress(&bz2, file, writefn);
-	if (bz2err == -1)
-		errx(1, "finishcompress");
-	filelen += bz2err;
+	compresslen = compressor->finish(compressor);
+	if (compresslen == -1)
+		errx(1, "compressor->finish");
+	filelen += compresslen;
 
 	/* Compute size of compressed ctrl data */
 	header->ctrl_block_length = filelen;
 
 	/* Write compressed diff data */
-	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
-		errx(1, "BZ2_bzCompressInit, err = %d", bz2err);
-	bz2err = writecompress(&bz2, file, writefn, db, dblen);
-	if (bz2err == -1)
-		errx(1, "writecompress");
-	filelen += bz2err;
-	bz2err = finishcompress(&bz2, file, writefn);
-	if (bz2err == -1)
-		errx(1, "finishcompress");
-	filelen += bz2err;
+	compresslen = compressor->write(compressor, db, dblen);
+	if (compresslen == -1)
+		errx(1, "compressor->write");
+	filelen += compresslen;
+	compresslen = compressor->finish(compressor);
+	if (compresslen == -1)
+		errx(1, "compressor->finish");
+	filelen += compresslen;
 
 	/* Compute size of compressed diff data */
 	header->diff_block_length = filelen - header->ctrl_block_length;
 
 	/* Write compressed extra data */
-	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
-		errx(1, "BZ2_bzCompressInit, err = %d", bz2err);
-	bz2err = writecompress(&bz2, file, writefn, eb, eblen);
-	if (bz2err == -1)
-		errx(1, "writecompress");
-	bz2err = finishcompress(&bz2, file, writefn);
-	if (bz2err == -1)
-		errx(1, "finishcompress");
+	compresslen = compressor->write(compressor, eb, eblen);
+	if (compresslen == -1)
+		errx(1, "compressor->write");
+	compresslen = compressor->finish(compressor);
+	if (compresslen == -1)
+		errx(1, "compressor->finish");
 
 	/* Free the memory we used */
 	free(db);
@@ -469,9 +407,84 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, void* file,
 	return 0;
 }
 
-static int bsdiff_fwrite(void* file, const void* buffer, int size)
+static int bz2_write(struct bsdiff_compressor* compressor, const void* buffer, int size)
 {
-	return fwrite(buffer, 1, size, (FILE*)file);
+	bz_stream* bz2;
+	FILE* pf;
+	int err;
+	int totalwritten;
+	char compress_buffer[4096];
+
+	bz2 = (bz_stream*)compressor->opaque;
+	pf = (FILE*)bz2->opaque;
+
+	if (!bz2->state)
+	{
+		if (BZ_OK != BZ2_bzCompressInit(bz2, 9, 0, 0))
+			return -1;
+	}
+
+	bz2->next_in = (char*)buffer;
+	bz2->avail_in = size;
+
+	totalwritten = 0;
+	for (;;)
+	{
+		bz2->next_out = compress_buffer;
+		bz2->avail_out = sizeof(compress_buffer);
+		if (BZ_RUN_OK != (err = BZ2_bzCompress(bz2, BZ_RUN)))
+			return -1;
+
+		if (bz2->avail_out < sizeof(compress_buffer))
+		{
+			const int written = sizeof(compress_buffer) - bz2->avail_out;
+			if (written != fwrite(compress_buffer, 1, written, pf))
+				return -1;
+
+			totalwritten += written;
+		}
+
+		if (bz2->avail_in == 0)
+			return totalwritten;
+	}
+}
+
+static int bz2_finish(struct bsdiff_compressor* compressor)
+{
+	int err;
+	int totalwritten;
+	bz_stream* bz2;
+	FILE* pf;
+	char compress_buffer[4096];
+
+	bz2 = (bz_stream*)compressor->opaque;
+	pf = (FILE*)bz2->opaque;
+
+	totalwritten = 0;
+	for (;;)
+	{
+		bz2->next_out = compress_buffer;
+		bz2->avail_out = sizeof(compress_buffer);
+
+		err = BZ2_bzCompress(bz2, BZ_FINISH);
+		if (BZ_FINISH_OK != err && BZ_STREAM_END != err)
+			return -1;
+
+		if (bz2->avail_out < sizeof(compress_buffer))
+		{
+			const int written = sizeof(compress_buffer) - bz2->avail_out;
+			if (written != fwrite(compress_buffer, 1, written, pf))
+				return -1;
+
+			totalwritten += written;
+		}
+
+		if (BZ_STREAM_END == err)
+			break;
+	}
+
+	BZ2_bzCompressEnd(bz2);
+	return totalwritten;
 }
 
 int main(int argc,char *argv[])
@@ -481,6 +494,11 @@ int main(int argc,char *argv[])
 	off_t oldsize,newsize;
 	struct bsdiff_header header;
 	FILE * pf;
+	struct bsdiff_compressor compressor;
+	bz_stream bz2 = {0};
+	compressor.opaque = &bz2;
+	compressor.write = bz2_write;
+	compressor.finish = bz2_finish;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -511,7 +529,8 @@ int main(int argc,char *argv[])
 	if (fwrite(&header, sizeof(header), 1, pf) != 1)
 		err(1, "Failed to write header");
 
-	if (bsdiff(old, oldsize, new, newsize, pf, bsdiff_fwrite, &header))
+	bz2.opaque = pf;
+	if (bsdiff(old, oldsize, new, newsize, &compressor, &header))
 		err(1, "bsdiff");
 
 	if (fseek(pf, 0, SEEK_SET) ||
