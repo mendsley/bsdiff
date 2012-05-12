@@ -113,7 +113,7 @@ static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 	if(start+len>kk) split(I,V,kk,start+len-kk,h);
 }
 
-static void qsufsort(int64_t *I,int64_t *V,uint8_t *old,int64_t oldsize)
+static void qsufsort(int64_t *I,int64_t *V,const uint8_t *old,int64_t oldsize)
 {
 	int64_t buckets[256];
 	int64_t i,h,len;
@@ -151,7 +151,7 @@ static void qsufsort(int64_t *I,int64_t *V,uint8_t *old,int64_t oldsize)
 	for(i=0;i<oldsize+1;i++) I[V[i]]=i;
 }
 
-static int64_t matchlen(uint8_t *old,int64_t oldsize,uint8_t *new,int64_t newsize)
+static int64_t matchlen(const uint8_t *old,int64_t oldsize,const uint8_t *new,int64_t newsize)
 {
 	int64_t i;
 
@@ -161,8 +161,8 @@ static int64_t matchlen(uint8_t *old,int64_t oldsize,uint8_t *new,int64_t newsiz
 	return i;
 }
 
-static int64_t search(int64_t *I,uint8_t *old,int64_t oldsize,
-		uint8_t *new,int64_t newsize,int64_t st,int64_t en,int64_t *pos)
+static int64_t search(const int64_t *I,const uint8_t *old,int64_t oldsize,
+		const uint8_t *new,int64_t newsize,int64_t st,int64_t en,int64_t *pos)
 {
 	int64_t x,y;
 
@@ -207,9 +207,9 @@ static void offtout(int64_t x,uint8_t *buf)
 
 struct bsdiff_request
 {
-	uint8_t* old;
+	const uint8_t* old;
 	int64_t oldsize;
-	uint8_t* new;
+	const uint8_t* new;
 	int64_t newsize;
 	struct bsdiff_compressor* compressor;
 	struct bsdiff_header* header;
@@ -367,7 +367,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	return 0;
 }
 
-int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
 {
 	int result;
 	struct bsdiff_request req;
