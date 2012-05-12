@@ -46,6 +46,8 @@ struct bsdiff_header
 	uint64_t new_file_length;
 };
 
+typedef int (*bsdiff_write)(void* file, const void* buffer, int size);
+
 #if defined(__linux__)
 #include <err.h>
 #else
@@ -238,7 +240,7 @@ static void offtout(off_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int writecompress(bz_stream* bz2, FILE* pf, const uint8_t* out, int size)
+static int writecompress(bz_stream* bz2, void* file, bsdiff_write writefn, const uint8_t* out, int size)
 {
 	int err;
 	int totalwritten;
@@ -258,7 +260,7 @@ static int writecompress(bz_stream* bz2, FILE* pf, const uint8_t* out, int size)
 		if (bz2->avail_out < sizeof(buffer))
 		{
 			const int written = sizeof(buffer) - bz2->avail_out;
-			if (1 != fwrite(buffer, written, 1, pf))
+			if (written != writefn(file, buffer, written))
 				return -1;
 
 			totalwritten += written;
@@ -269,7 +271,7 @@ static int writecompress(bz_stream* bz2, FILE* pf, const uint8_t* out, int size)
 	}
 }
 
-static int finishcompress(bz_stream* bz2, FILE* pf)
+static int finishcompress(bz_stream* bz2, void* file, bsdiff_write writefn)
 {
 	int err;
 	int totalwritten;
@@ -288,7 +290,7 @@ static int finishcompress(bz_stream* bz2, FILE* pf)
 		if (bz2->avail_out < sizeof(buffer))
 		{
 			const int written = sizeof(buffer) - bz2->avail_out;
-			if (1 != fwrite(buffer, written, 1, pf))
+			if (written != writefn(file, buffer, written))
 				return -1;
 
 			totalwritten += written;
@@ -302,7 +304,7 @@ static int finishcompress(bz_stream* bz2, FILE* pf)
 	return totalwritten;
 }
 
-int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, struct bsdiff_header* header)
+int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, void* file, bsdiff_write writefn, struct bsdiff_header* header)
 {
 	off_t *I,*V;
 	off_t scan,pos,len;
@@ -416,7 +418,7 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			bz2err = writecompress(&bz2, pf, buf, sizeof(buf));
+			bz2err = writecompress(&bz2, file, writefn, buf, sizeof(buf));
 			if (bz2err == -1)
 				errx(1, "writecompress");
 			filelen += bz2err;
@@ -426,7 +428,7 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 			lastoffset=pos-scan;
 		};
 	};
-	bz2err = finishcompress(&bz2, pf);
+	bz2err = finishcompress(&bz2, file, writefn);
 	if (bz2err == -1)
 		errx(1, "finishcompress");
 	filelen += bz2err;
@@ -437,11 +439,11 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	/* Write compressed diff data */
 	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
 		errx(1, "BZ2_bzCompressInit, err = %d", bz2err);
-	bz2err = writecompress(&bz2, pf, db, dblen);
+	bz2err = writecompress(&bz2, file, writefn, db, dblen);
 	if (bz2err == -1)
 		errx(1, "writecompress");
 	filelen += bz2err;
-	bz2err = finishcompress(&bz2, pf);
+	bz2err = finishcompress(&bz2, file, writefn);
 	if (bz2err == -1)
 		errx(1, "finishcompress");
 	filelen += bz2err;
@@ -452,10 +454,10 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	/* Write compressed extra data */
 	if (BZ_OK != (bz2err = BZ2_bzCompressInit(&bz2, 9, 0, 0)))
 		errx(1, "BZ2_bzCompressInit, err = %d", bz2err);
-	bz2err = writecompress(&bz2, pf, eb, eblen);
+	bz2err = writecompress(&bz2, file, writefn, eb, eblen);
 	if (bz2err == -1)
 		errx(1, "writecompress");
-	bz2err = finishcompress(&bz2, pf);
+	bz2err = finishcompress(&bz2, file, writefn);
 	if (bz2err == -1)
 		errx(1, "finishcompress");
 
@@ -465,6 +467,11 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	free(I);
 
 	return 0;
+}
+
+static int bsdiff_fwrite(void* file, const void* buffer, int size)
+{
+	return fwrite(buffer, 1, size, (FILE*)file);
 }
 
 int main(int argc,char *argv[])
@@ -504,7 +511,7 @@ int main(int argc,char *argv[])
 	if (fwrite(&header, sizeof(header), 1, pf) != 1)
 		err(1, "Failed to write header");
 
-	if (bsdiff(old, oldsize, new, newsize, pf, &header))
+	if (bsdiff(old, oldsize, new, newsize, pf, bsdiff_fwrite, &header))
 		err(1, "bsdiff");
 
 	if (fseek(pf, 0, SEEK_SET) ||
