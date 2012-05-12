@@ -305,7 +305,8 @@ static int finishcompress(bz_stream* bz2, FILE* pf)
 int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, struct bsdiff_header* header)
 {
 	off_t *I,*V;
-	off_t scan,pos,len,filelen;
+	off_t scan,pos,len;
+	off_t compresslen, filelen;
 	off_t lastscan,lastpos,lastoffset;
 	off_t oldscore,scsc;
 	off_t s,Sf,lenf,Sb,lenb;
@@ -313,7 +314,7 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 	off_t i;
 	off_t dblen,eblen;
 	uint8_t *db,*eb;
-	uint8_t buf[8];
+	uint8_t buf[8 * 3];
 
 	bz_stream bz2 = {0};
 	int bz2err;
@@ -412,18 +413,10 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, s
 			eblen+=(scan-lenb)-(lastscan+lenf);
 
 			offtout(lenf,buf);
-			bz2err = writecompress(&bz2, pf, buf, 8);
-			if (bz2err == -1)
-				errx(1, "writecompress");
+			offtout((scan-lenb)-(lastscan+lenf),buf+8);
+			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			offtout((scan-lenb)-(lastscan+lenf),buf);
-			bz2err = writecompress(&bz2, pf, buf, 8);
-			if (bz2err == -1)
-				errx(1, "writecompress");
-			filelen += bz2err;
-
-			offtout((pos-lenb)-(lastpos+lenf),buf);
-			bz2err = writecompress(&bz2, pf, buf, 8);
+			bz2err = writecompress(&bz2, pf, buf, sizeof(buf));
 			if (bz2err == -1)
 				errx(1, "writecompress");
 			filelen += bz2err;
