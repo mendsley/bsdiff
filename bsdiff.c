@@ -205,7 +205,17 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
+struct bsdiff_request
+{
+	uint8_t* old;
+	int64_t oldsize;
+	uint8_t* new;
+	int64_t newsize;
+	struct bsdiff_compressor* compressor;
+	struct bsdiff_header* header;
+};
+
+static int bsdiff_internal(const struct bsdiff_request req)
 {
 	int64_t *I,*V;
 	int64_t scan,pos,len;
@@ -219,14 +229,14 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
-	if(((I=malloc((oldsize+1)*sizeof(int64_t)))==NULL) ||
-		((V=malloc((oldsize+1)*sizeof(int64_t)))==NULL)) return -1;
+	if(((I=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) ||
+		((V=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL)) return -1;
 
-	qsufsort(I,V,old,oldsize);
+	qsufsort(I,V,req.old,req.oldsize);
 
 	free(V);
-	if(((db=malloc(newsize+1))==NULL) ||
-		((eb=malloc(newsize+1))==NULL)) return -1;
+	if(((db=malloc(req.newsize+1))==NULL) ||
+		((eb=malloc(req.newsize+1))==NULL)) return -1;
 	dblen=0;
 	eblen=0;
 	filelen=0;
@@ -241,47 +251,47 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 		32	??	Bzip2ed ctrl block
 		??	??	Bzip2ed diff block
 		??	??	Bzip2ed extra block */
-	memcpy(header->signature,"BSDIFF40",sizeof(header->signature));
-	header->ctrl_block_length = 0;
-	header->diff_block_length = 0;
-	header->new_file_length = newsize;
+	memcpy(req.header->signature,"BSDIFF40",sizeof(req.header->signature));
+	req.header->ctrl_block_length = 0;
+	req.header->diff_block_length = 0;
+	req.header->new_file_length = req.newsize;
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;
 	lastscan=0;lastpos=0;lastoffset=0;
-	while(scan<newsize) {
+	while(scan<req.newsize) {
 		oldscore=0;
 
-		for(scsc=scan+=len;scan<newsize;scan++) {
-			len=search(I,old,oldsize,new+scan,newsize-scan,
-					0,oldsize,&pos);
+		for(scsc=scan+=len;scan<req.newsize;scan++) {
+			len=search(I,req.old,req.oldsize,req.new+scan,req.newsize-scan,
+					0,req.oldsize,&pos);
 
 			for(;scsc<scan+len;scsc++)
-			if((scsc+lastoffset<oldsize) &&
-				(old[scsc+lastoffset] == new[scsc]))
+			if((scsc+lastoffset<req.oldsize) &&
+				(req.old[scsc+lastoffset] == req.new[scsc]))
 				oldscore++;
 
 			if(((len==oldscore) && (len!=0)) || 
 				(len>oldscore+8)) break;
 
-			if((scan+lastoffset<oldsize) &&
-				(old[scan+lastoffset] == new[scan]))
+			if((scan+lastoffset<req.oldsize) &&
+				(req.old[scan+lastoffset] == req.new[scan]))
 				oldscore--;
 		};
 
-		if((len!=oldscore) || (scan==newsize)) {
+		if((len!=oldscore) || (scan==req.newsize)) {
 			s=0;Sf=0;lenf=0;
-			for(i=0;(lastscan+i<scan)&&(lastpos+i<oldsize);) {
-				if(old[lastpos+i]==new[lastscan+i]) s++;
+			for(i=0;(lastscan+i<scan)&&(lastpos+i<req.oldsize);) {
+				if(req.old[lastpos+i]==req.new[lastscan+i]) s++;
 				i++;
 				if(s*2-i>Sf*2-lenf) { Sf=s; lenf=i; };
 			};
 
 			lenb=0;
-			if(scan<newsize) {
+			if(scan<req.newsize) {
 				s=0;Sb=0;
 				for(i=1;(scan>=lastscan+i)&&(pos>=i);i++) {
-					if(old[pos-i]==new[scan-i]) s++;
+					if(req.old[pos-i]==req.new[scan-i]) s++;
 					if(s*2-i>Sb*2-lenb) { Sb=s; lenb=i; };
 				};
 			};
@@ -290,10 +300,10 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 				overlap=(lastscan+lenf)-(scan-lenb);
 				s=0;Ss=0;lens=0;
 				for(i=0;i<overlap;i++) {
-					if(new[lastscan+lenf-overlap+i]==
-					   old[lastpos+lenf-overlap+i]) s++;
-					if(new[scan-lenb+i]==
-					   old[pos-lenb+i]) s--;
+					if(req.new[lastscan+lenf-overlap+i]==
+					   req.old[lastpos+lenf-overlap+i]) s++;
+					if(req.new[scan-lenb+i]==
+					   req.old[pos-lenb+i]) s--;
 					if(s>Ss) { Ss=s; lens=i+1; };
 				};
 
@@ -302,9 +312,9 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 			};
 
 			for(i=0;i<lenf;i++)
-				db[dblen+i]=new[lastscan+i]-old[lastpos+i];
+				db[dblen+i]=req.new[lastscan+i]-req.old[lastpos+i];
 			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
-				eb[eblen+i]=new[lastscan+lenf+i];
+				eb[eblen+i]=req.new[lastscan+lenf+i];
 
 			dblen+=lenf;
 			eblen+=(scan-lenb)-(lastscan+lenf);
@@ -313,7 +323,7 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			compresslen = compressor->write(compressor, buf, sizeof(buf));
+			compresslen = req.compressor->write(req.compressor, buf, sizeof(buf));
 			if (compresslen == -1)
 				return -1;
 			filelen += compresslen;
@@ -323,32 +333,32 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 			lastoffset=pos-scan;
 		};
 	};
-	compresslen = compressor->finish(compressor);
+	compresslen = req.compressor->finish(req.compressor);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
 
 	/* Compute size of compressed ctrl data */
-	header->ctrl_block_length = filelen;
+	req.header->ctrl_block_length = filelen;
 
 	/* Write compressed diff data */
-	compresslen = compressor->write(compressor, db, dblen);
+	compresslen = req.compressor->write(req.compressor, db, dblen);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
-	compresslen = compressor->finish(compressor);
+	compresslen = req.compressor->finish(req.compressor);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
 
 	/* Compute size of compressed diff data */
-	header->diff_block_length = filelen - header->ctrl_block_length;
+	req.header->diff_block_length = filelen - req.header->ctrl_block_length;
 
 	/* Write compressed extra data */
-	compresslen = compressor->write(compressor, eb, eblen);
+	compresslen = req.compressor->write(req.compressor, eb, eblen);
 	if (compresslen == -1)
 		return -1;
-	compresslen = compressor->finish(compressor);
+	compresslen = req.compressor->finish(req.compressor);
 	if (compresslen == -1)
 		return -1;
 
@@ -358,6 +368,18 @@ int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct 
 	free(I);
 
 	return 0;
+}
+
+int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
+{
+	struct bsdiff_request req;
+	req.old = old;
+	req.oldsize = oldsize;
+	req.new = new;
+	req.newsize = newsize;
+	req.compressor = compressor;
+	req.header = header;
+	return bsdiff_internal(req);
 }
 
 #if !defined(BSDIFF_LIBRARY)
