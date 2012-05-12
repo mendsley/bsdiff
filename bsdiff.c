@@ -30,13 +30,9 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 
 #include <sys/types.h>
 
-#include <bzlib.h>
-#include <fcntl.h>
-#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 struct bsdiff_header
 {
@@ -262,10 +258,6 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, struct bsdi
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
-	bz_stream bz2 = {0};
-	int bz2err;
-
-
 	if(((I=malloc((oldsize+1)*sizeof(off_t)))==NULL) ||
 		((V=malloc((oldsize+1)*sizeof(off_t)))==NULL)) err(1,NULL);
 
@@ -407,6 +399,13 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, struct bsdi
 	return 0;
 }
 
+#if !defined(BSDIFF_LIBRARY)
+
+#include <bzlib.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+
 static int bz2_write(struct bsdiff_compressor* compressor, const void* buffer, int size)
 {
 	bz_stream* bz2;
@@ -546,3 +545,5 @@ int main(int argc,char *argv[])
 
 	return 0;
 }
+
+#endif
