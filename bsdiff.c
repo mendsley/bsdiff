@@ -213,6 +213,8 @@ struct bsdiff_request
 	int64_t newsize;
 	struct bsdiff_compressor* compressor;
 	struct bsdiff_header* header;
+	int64_t *I;
+	uint8_t *db, *eb;
 };
 
 static int bsdiff_internal(const struct bsdiff_request req)
@@ -229,14 +231,14 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
-	if(((I=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) ||
-		((V=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL)) return -1;
+	if((V=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
+	I = req.I;
 
 	qsufsort(I,V,req.old,req.oldsize);
-
 	free(V);
-	if(((db=malloc(req.newsize+1))==NULL) ||
-		((eb=malloc(req.newsize+1))==NULL)) return -1;
+
+	db = req.db;
+	eb = req.eb;
 	dblen=0;
 	eblen=0;
 	filelen=0;
@@ -362,24 +364,44 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	if (compresslen == -1)
 		return -1;
 
-	/* Free the memory we used */
-	free(db);
-	free(eb);
-	free(I);
-
 	return 0;
 }
 
 int bsdiff(uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
 {
+	int result;
 	struct bsdiff_request req;
+
+	if((req.I=malloc((oldsize+1)*sizeof(int64_t)))==NULL)
+		return -1;
+
+	if((req.db=malloc(newsize+1))==NULL)
+	{
+		free(req.I);
+		return -1;
+	}
+
+	if((req.eb=malloc(newsize+1))==NULL)
+	{
+		free(req.db);
+		free(req.I);
+		return -1;
+	}
+
 	req.old = old;
 	req.oldsize = oldsize;
 	req.new = new;
 	req.newsize = newsize;
 	req.compressor = compressor;
 	req.header = header;
-	return bsdiff_internal(req);
+
+	result = bsdiff_internal(req);
+
+	free(req.eb);
+	free(req.db);
+	free(req.I);
+
+	return result;
 }
 
 #if !defined(BSDIFF_LIBRARY)
