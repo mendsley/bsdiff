@@ -38,6 +38,14 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 #include <string.h>
 #include <unistd.h>
 
+struct bsdiff_header
+{
+	uint8_t signature[8];
+	uint64_t ctrl_block_length;
+	uint64_t diff_block_length;
+	uint64_t new_file_length;
+};
+
 #if defined(__linux__)
 #include <err.h>
 #else
@@ -230,7 +238,7 @@ static void offtout(off_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
+int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf, struct bsdiff_header* header)
 {
 	off_t *I,*V;
 	off_t scan,pos,len;
@@ -242,7 +250,6 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
 	off_t dblen,eblen;
 	uint8_t *db,*eb;
 	uint8_t buf[8];
-	uint8_t header[32];
 	BZFILE * pfbz2;
 	int bz2err;
 
@@ -268,12 +275,10 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
 		32	??	Bzip2ed ctrl block
 		??	??	Bzip2ed diff block
 		??	??	Bzip2ed extra block */
-	memcpy(header,"BSDIFF40",8);
-	offtout(0, header + 8);
-	offtout(0, header + 16);
-	offtout(newsize, header + 24);
-	if (fwrite(header, 32, 1, pf) != 1)
-		err(1, "fwrite(%s)", "patch");
+	memcpy(header->signature,"BSDIFF40",sizeof(header->signature));
+	header->ctrl_block_length = 0;
+	header->diff_block_length = 0;
+	header->new_file_length = newsize;
 
 	/* Compute the differences, writing ctrl as we go */
 	if ((pfbz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)) == NULL)
@@ -366,8 +371,8 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
 
 	/* Compute size of compressed ctrl data */
 	if ((len = ftello(pf)) == -1)
-		err(1, "ftello");
-	offtout(len-32, header + 8);
+		err(1, "ftello64");
+	header->ctrl_block_length = len-32;
 
 	/* Write compressed diff data */
 	if ((pfbz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)) == NULL)
@@ -381,8 +386,8 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
 
 	/* Compute size of compressed diff data */
 	if ((newsize = ftello(pf)) == -1)
-		err(1, "ftello");
-	offtout(newsize - len, header + 16);
+		err(1, "ftello64");
+	header->diff_block_length = newsize - len;
 
 	/* Write compressed extra data */
 	if ((pfbz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)) == NULL)
@@ -393,12 +398,6 @@ int bsdiff(uint8_t* old, off_t oldsize, uint8_t* new, off_t newsize, FILE* pf)
 	BZ2_bzWriteClose(&bz2err, pfbz2, 0, NULL, NULL);
 	if (bz2err != BZ_OK)
 		errx(1, "BZ2_bzWriteClose, bz2err = %d", bz2err);
-
-	/* Seek to the beginning, write the header, and close the file */
-	if (fseeko(pf, 0, SEEK_SET))
-		err(1, "fseeko");
-	if (fwrite(header, 32, 1, pf) != 1)
-		err(1, "fwrite(%s)", "patch");
 
 	/* Free the memory we used */
 	free(db);
@@ -413,6 +412,7 @@ int main(int argc,char *argv[])
 	int fd;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
+	struct bsdiff_header header;
 	FILE * pf;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
@@ -440,8 +440,16 @@ int main(int argc,char *argv[])
 	if ((pf = fopen(argv[3], "w")) == NULL)
 		err(1, "%s", argv[3]);
 
-	if (bsdiff(old, oldsize, new, newsize, pf))
+	/* Save space for header */
+	if (fwrite(&header, sizeof(header), 1, pf) != 1)
+		err(1, "Failed to write header");
+
+	if (bsdiff(old, oldsize, new, newsize, pf, &header))
 		err(1, "bsdiff");
+
+	if (fseek(pf, 0, SEEK_SET) ||
+		fwrite(&header, sizeof(header), 1, pf) != 1)
+		err(1, "Failed to write header");
 
 	if (fclose(pf))
 		err(1, "fclose");
