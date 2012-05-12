@@ -29,8 +29,6 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 #endif
 
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 
 struct bsdiff_header
 {
@@ -49,6 +47,11 @@ struct bsdiff_compressor
 	int (*write)(struct bsdiff_compressor* compresor, const void* buffer, int size);
 	int (*finish)(struct bsdiff_compressor* compressor);
 };
+
+#if !defined(BSDIFF_HEADER_ONLY)
+
+#include <stdlib.h>
+#include <string.h>
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
@@ -554,4 +557,6 @@ int main(int argc,char *argv[])
 	return 0;
 }
 
-#endif
+#endif //BSDIFF_LIBRARY
+
+#endif // BSDIFF_HEADER_ONLY
