@@ -29,6 +29,7 @@
 __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05 cperciva Exp $");
 #endif
 
+#include <stddef.h>
 #include <stdint.h>
 
 struct bsdiff_header
@@ -43,6 +44,8 @@ struct bsdiff_stream
 {
 	void* opaque;
 
+	void* (*malloc)(size_t size);
+	void (*free)(void* ptr);
 	int (*write)(struct bsdiff_stream* compresor, const void* buffer, int size);
 	int (*finish)(struct bsdiff_stream* stream);
 };
@@ -52,7 +55,6 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 #if !defined(BSDIFF_HEADER_ONLY)
 
 #include <limits.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
@@ -257,11 +259,11 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
-	if((V=malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
+	if((V=req.stream->malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
 	I = req.I;
 
 	qsufsort(I,V,req.old,req.oldsize);
-	free(V);
+	req.stream->free(V);
 
 	db = req.db;
 	eb = req.eb;
@@ -397,19 +399,19 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	int result;
 	struct bsdiff_request req;
 
-	if((req.I=malloc((oldsize+1)*sizeof(int64_t)))==NULL)
+	if((req.I=stream->malloc((oldsize+1)*sizeof(int64_t)))==NULL)
 		return -1;
 
-	if((req.db=malloc(newsize+1))==NULL)
+	if((req.db=stream->malloc(newsize+1))==NULL)
 	{
-		free(req.I);
+		stream->free(req.I);
 		return -1;
 	}
 
-	if((req.eb=malloc(newsize+1))==NULL)
+	if((req.eb=stream->malloc(newsize+1))==NULL)
 	{
-		free(req.db);
-		free(req.I);
+		stream->free(req.db);
+		stream->free(req.I);
 		return -1;
 	}
 
@@ -422,9 +424,9 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 
 	result = bsdiff_internal(req);
 
-	free(req.eb);
-	free(req.db);
-	free(req.I);
+	stream->free(req.eb);
+	stream->free(req.db);
+	stream->free(req.I);
 
 	return result;
 }
@@ -437,6 +439,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 #include <err.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
@@ -528,6 +531,8 @@ int main(int argc,char *argv[])
 	FILE * pf;
 	struct bsdiff_stream stream;
 	bz_stream bz2 = {0};
+	stream.malloc = malloc;
+	stream.free = free;
 	stream.opaque = &bz2;
 	stream.write = bz2_write;
 	stream.finish = bz2_finish;
