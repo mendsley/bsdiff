@@ -47,6 +47,8 @@ struct bsdiff_compressor
 	int (*finish)(struct bsdiff_compressor* compressor);
 };
 
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header);
+
 #if !defined(BSDIFF_HEADER_ONLY)
 
 #include <limits.h>
