@@ -37,6 +37,17 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bspatch/bspatch.c,v 1.1 2005/08/06 01:59:
 #include <unistd.h>
 #include <fcntl.h>
 
+struct bspatch_request
+{
+	const uint8_t* old;
+	int oldsize;
+	uint8_t* new;
+	int newsize;
+	FILE* cpf;
+	FILE* dpf;
+	FILE* epf;
+};
+
 static int64_t offtin(uint8_t *buf)
 {
 	int64_t y;
@@ -94,7 +105,7 @@ static int readcompress(bz_stream* bz2, FILE* pf, uint8_t* dest, int length)
 	return -1;
 }
 
-int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsize, FILE* cpf, FILE* dpf, FILE* epf)
+int bspatch(const struct bspatch_request req)
 {
 	bz_stream cbz2 = {0};
 	bz_stream dbz2 = {0};
@@ -119,39 +130,39 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
 
 	oldpos=0;newpos=0;
-	while(newpos<newsize) {
+	while(newpos<req.newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			lenread = readcompress(&cbz2, cpf, buf, 8);
+			lenread = readcompress(&cbz2, req.cpf, buf, 8);
 			if (lenread != 8)
 				errx(1, "Corrupt patch\n");
 			ctrl[i]=offtin(buf);
 		};
 
 		/* Sanity-check */
-		if(newpos+ctrl[0]>newsize)
+		if(newpos+ctrl[0]>req.newsize)
 			errx(1,"Corrupt patch\n");
 
 		/* Read diff string */
-		lenread = readcompress(&dbz2, dpf, new + newpos, ctrl[0]);
+		lenread = readcompress(&dbz2, req.dpf, req.new + newpos, ctrl[0]);
 		if (lenread != ctrl[0])
 			errx(1, "Corrupt patch\n");
 
 		/* Add old data to diff string */
 		for(i=0;i<ctrl[0];i++)
-			if((oldpos+i>=0) && (oldpos+i<oldsize))
-				new[newpos+i]+=old[oldpos+i];
+			if((oldpos+i>=0) && (oldpos+i<req.oldsize))
+				req.new[newpos+i]+=req.old[oldpos+i];
 
 		/* Adjust pointers */
 		newpos+=ctrl[0];
 		oldpos+=ctrl[0];
 
 		/* Sanity-check */
-		if(newpos+ctrl[1]>newsize)
+		if(newpos+ctrl[1]>req.newsize)
 			errx(1,"Corrupt patch\n");
 
 		/* Read extra string */
-		lenread = readcompress(&ebz2, epf, new + newpos, ctrl[1]);
+		lenread = readcompress(&ebz2, req.epf, req.new + newpos, ctrl[1]);
 		if (lenread != ctrl[1])
 			errx(1, "Corrupt patch\n");
 
@@ -170,12 +181,12 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 
 int main(int argc,char * argv[])
 {
-	FILE * f, * cpf, * dpf, * epf;
+	FILE * f;
 	int fd;
-	ssize_t oldsize,newsize;
 	ssize_t bzctrllen,bzdatalen;
 	uint8_t header[32];
-	uint8_t *old, *new;
+	uint8_t *old;
+	struct bspatch_request req;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -211,46 +222,47 @@ int main(int argc,char * argv[])
 	/* Read lengths from header */
 	bzctrllen=offtin(header+8);
 	bzdatalen=offtin(header+16);
-	newsize=offtin(header+24);
-	if((bzctrllen<0) || (bzdatalen<0) || (newsize<0))
+	req.newsize=offtin(header+24);
+	if((bzctrllen<0) || (bzdatalen<0) || (req.newsize<0))
 		errx(1,"Corrupt patch\n");
 
 	/* Close patch file and re-open it via libbzip2 at the right places */
 	if (fclose(f))
 		err(1, "fclose(%s)", argv[3]);
-	if ((cpf = fopen(argv[3], "r")) == NULL)
+	if ((req.cpf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(cpf, 32, SEEK_SET))
-		err(1, "fseeko(%s, %lld)", argv[3],
+	if (fseeko(req.cpf, 32, SEEK_SET))
+		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)32);
-	if ((dpf = fopen(argv[3], "r")) == NULL)
+	if ((req.dpf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(dpf, 32 + bzctrllen, SEEK_SET))
-		err(1, "fseeko(%s, %lld)", argv[3],
+	if (fseeko(req.dpf, 32 + bzctrllen, SEEK_SET))
+		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)(32 + bzctrllen));
-	if ((epf = fopen(argv[3], "r")) == NULL)
+	if ((req.epf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(epf, 32 + bzctrllen + bzdatalen, SEEK_SET))
-		err(1, "fseeko(%s, %lld)", argv[3],
+	if (fseeko(req.epf, 32 + bzctrllen + bzdatalen, SEEK_SET))
+		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)(32 + bzctrllen + bzdatalen));
 
 	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
-		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
-		((old=malloc(oldsize+1))==NULL) ||
+		((req.oldsize=lseek(fd,0,SEEK_END))==-1) ||
+		((old=malloc(req.oldsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
+		(read(fd,old,req.oldsize)!=req.oldsize) ||
 		(close(fd)==-1)) err(1,"%s",argv[1]);
-	if((new=malloc(newsize+1))==NULL) err(1,NULL);
+	req.old = old;
+	if((req.new=malloc(req.newsize+1))==NULL) err(1,NULL);
 
-	if (bspatch(old, oldsize, new, newsize, cpf, dpf, epf))
+	if (bspatch(req))
 		err(1, "bspatch");
 
 	/* Write the new file */
 	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,0666))<0) ||
-		(write(fd,new,newsize)!=newsize) || (close(fd)==-1))
+		(write(fd,req.new,req.newsize)!=req.newsize) || (close(fd)==-1))
 		err(1,"%s",argv[2]);
 
-	free(new);
+	free(req.new);
 	free(old);
 
 	return 0;
