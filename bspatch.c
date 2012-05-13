@@ -55,31 +55,75 @@ static int64_t offtin(uint8_t *buf)
 	return y;
 }
 
+static const int BUFFER_SIZE = 4096;
+
+static int readcompress(bz_stream* bz2, FILE* pf, uint8_t* dest, int length)
+{
+	int n;
+	int ret;
+
+	bz2->next_out = (char*)dest;
+	bz2->avail_out = length;
+
+	for (;;)
+	{
+		if (bz2->avail_in == 0 && !feof(pf) && bz2->avail_out > 0)
+		{
+			n = fread(bz2->opaque, 1, BUFFER_SIZE, pf);
+			if (ferror(pf))
+				return -1;
+
+			bz2->next_in = bz2->opaque;
+			bz2->avail_in = n;
+		}
+
+		ret = BZ2_bzDecompress(bz2);
+		if (ret != BZ_OK && ret != BZ_STREAM_END)
+			return -1;
+
+		if (ret == BZ_OK && feof(pf) && bz2->avail_in == 0 && bz2->avail_out > 0)
+			return -1;
+
+		if (ret == BZ_STREAM_END)
+			return length - bz2->avail_out;
+		if (bz2->avail_out == 0)
+			return length;
+	}
+
+	// unreachable
+	return -1;
+}
+
 int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsize, FILE* cpf, FILE* dpf, FILE* epf)
 {
-	BZFILE * cpfbz2, * dpfbz2, * epfbz2;
+	bz_stream cbz2 = {0};
+	bz_stream dbz2 = {0};
+	bz_stream ebz2 = {0};
+	char cbuf[BUFFER_SIZE], dbuf[BUFFER_SIZE], ebuf[BUFFER_SIZE];
 	int cbz2err, dbz2err, ebz2err;
-	ssize_t bzctrllen,bzdatalen;
 	uint8_t buf[8];
 	int64_t oldpos,newpos;
 	int64_t ctrl[3];
 	int64_t lenread;
 	int64_t i;
 
-	if ((cpfbz2 = BZ2_bzReadOpen(&cbz2err, cpf, 0, 0, NULL, 0)) == NULL)
-		errx(1, "BZ2_bzReadOpen, bz2err = %d", cbz2err);
-	if ((dpfbz2 = BZ2_bzReadOpen(&dbz2err, dpf, 0, 0, NULL, 0)) == NULL)
-		errx(1, "BZ2_bzReadOpen, bz2err = %d", dbz2err);
-	if ((epfbz2 = BZ2_bzReadOpen(&ebz2err, epf, 0, 0, NULL, 0)) == NULL)
-		errx(1, "BZ2_bzReadOpen, bz2err = %d", ebz2err);
+	cbz2.opaque = cbuf;
+	dbz2.opaque = dbuf;
+	ebz2.opaque = ebuf;
+
+	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", cbz2err);
+	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", dbz2err);
+	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
 
 	oldpos=0;newpos=0;
 	while(newpos<newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			lenread = BZ2_bzRead(&cbz2err, cpfbz2, buf, 8);
-			if ((lenread < 8) || ((cbz2err != BZ_OK) &&
-			    (cbz2err != BZ_STREAM_END)))
+			lenread = readcompress(&cbz2, cpf, buf, 8);
+			if (lenread != 8)
 				errx(1, "Corrupt patch\n");
 			ctrl[i]=offtin(buf);
 		};
@@ -89,9 +133,8 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 			errx(1,"Corrupt patch\n");
 
 		/* Read diff string */
-		lenread = BZ2_bzRead(&dbz2err, dpfbz2, new + newpos, ctrl[0]);
-		if ((lenread < ctrl[0]) ||
-		    ((dbz2err != BZ_OK) && (dbz2err != BZ_STREAM_END)))
+		lenread = readcompress(&dbz2, dpf, new + newpos, ctrl[0]);
+		if (lenread != ctrl[0])
 			errx(1, "Corrupt patch\n");
 
 		/* Add old data to diff string */
@@ -108,9 +151,8 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 			errx(1,"Corrupt patch\n");
 
 		/* Read extra string */
-		lenread = BZ2_bzRead(&ebz2err, epfbz2, new + newpos, ctrl[1]);
-		if ((lenread < ctrl[1]) ||
-		    ((ebz2err != BZ_OK) && (ebz2err != BZ_STREAM_END)))
+		lenread = readcompress(&ebz2, epf, new + newpos, ctrl[1]);
+		if (lenread != ctrl[1])
 			errx(1, "Corrupt patch\n");
 
 		/* Adjust pointers */
@@ -119,9 +161,9 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 	};
 
 	/* Clean up the bzip2 reads */
-	BZ2_bzReadClose(&cbz2err, cpfbz2);
-	BZ2_bzReadClose(&dbz2err, dpfbz2);
-	BZ2_bzReadClose(&ebz2err, epfbz2);
+	BZ2_bzDecompressEnd(&cbz2);
+	BZ2_bzDecompressEnd(&dbz2);
+	BZ2_bzDecompressEnd(&ebz2);
 
 	return 0;
 }
@@ -129,17 +171,11 @@ int bspatch(const uint8_t* old, const int oldsize, uint8_t* new, const int newsi
 int main(int argc,char * argv[])
 {
 	FILE * f, * cpf, * dpf, * epf;
-	BZFILE * cpfbz2, * dpfbz2, * epfbz2;
-	int cbz2err, dbz2err, ebz2err;
 	int fd;
 	ssize_t oldsize,newsize;
 	ssize_t bzctrllen,bzdatalen;
 	uint8_t header[32];
 	uint8_t *old, *new;
-	int64_t oldpos,newpos;
-	int64_t ctrl[3];
-	int64_t lenread;
-	int64_t i;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
