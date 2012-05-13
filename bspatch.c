@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bspatch/bspatch.c,v 1.1 2005/08/06 01:59:
 #include <unistd.h>
 #include <fcntl.h>
 
-static int64_t offtin(u_char *buf)
+static int64_t offtin(uint8_t *buf)
 {
 	int64_t y;
 
@@ -63,8 +63,8 @@ int main(int argc,char * argv[])
 	int fd;
 	ssize_t oldsize,newsize;
 	ssize_t bzctrllen,bzdatalen;
-	u_char header[32],buf[8];
-	u_char *old, *new;
+	uint8_t header[32],buf[8];
+	uint8_t *old, *new;
 	int64_t oldpos,newpos;
 	int64_t ctrl[3];
 	int64_t lenread;
