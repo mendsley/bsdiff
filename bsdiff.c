@@ -39,15 +39,15 @@ struct bsdiff_header
 	uint8_t new_file_length[8];
 };
 
-struct bsdiff_compressor
+struct bsdiff_stream
 {
 	void* opaque;
 
-	int (*write)(struct bsdiff_compressor* compresor, const void* buffer, int size);
-	int (*finish)(struct bsdiff_compressor* compressor);
+	int (*write)(struct bsdiff_stream* compresor, const void* buffer, int size);
+	int (*finish)(struct bsdiff_stream* stream);
 };
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header);
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream, struct bsdiff_header* header);
 
 #if !defined(BSDIFF_HEADER_ONLY)
 
@@ -210,14 +210,14 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int64_t writecompressed(struct bsdiff_compressor* compressor, const void* buffer, int64_t length)
+static int64_t writecompressed(struct bsdiff_stream* stream, const void* buffer, int64_t length)
 {
 	int64_t result = 0;
 
 	while (length > 0)
 	{
 		const int smallsize = (int)MIN(length, INT_MAX);
-		const int writeresult = compressor->write(compressor, buffer, smallsize);
+		const int writeresult = stream->write(stream, buffer, smallsize);
 		if (writeresult == -1)
 		{
 			return -1;
@@ -237,7 +237,7 @@ struct bsdiff_request
 	int64_t oldsize;
 	const uint8_t* new;
 	int64_t newsize;
-	struct bsdiff_compressor* compressor;
+	struct bsdiff_stream* stream;
 	struct bsdiff_header* header;
 	int64_t *I;
 	uint8_t *db, *eb;
@@ -349,7 +349,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			compresslen = writecompressed(req.compressor, buf, sizeof(buf));
+			compresslen = writecompressed(req.stream, buf, sizeof(buf));
 			if (compresslen == -1)
 				return -1;
 			filelen += compresslen;
@@ -359,7 +359,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			lastoffset=pos-scan;
 		};
 	};
-	compresslen = req.compressor->finish(req.compressor);
+	compresslen = req.stream->finish(req.stream);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
@@ -369,11 +369,11 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 	/* Write compressed diff data */
 	filelen = 0;
-	compresslen = writecompressed(req.compressor, db, dblen);
+	compresslen = writecompressed(req.stream, db, dblen);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
-	compresslen = req.compressor->finish(req.compressor);
+	compresslen = req.stream->finish(req.stream);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
@@ -382,17 +382,17 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	offtout(filelen, req.header->diff_block_length);
 
 	/* Write compressed extra data */
-	compresslen = writecompressed(req.compressor, eb, eblen);
+	compresslen = writecompressed(req.stream, eb, eblen);
 	if (compresslen == -1)
 		return -1;
-	compresslen = req.compressor->finish(req.compressor);
+	compresslen = req.stream->finish(req.stream);
 	if (compresslen == -1)
 		return -1;
 
 	return 0;
 }
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_compressor* compressor, struct bsdiff_header* header)
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream, struct bsdiff_header* header)
 {
 	int result;
 	struct bsdiff_request req;
@@ -417,7 +417,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	req.oldsize = oldsize;
 	req.new = new;
 	req.newsize = newsize;
-	req.compressor = compressor;
+	req.stream = stream;
 	req.header = header;
 
 	result = bsdiff_internal(req);
@@ -439,7 +439,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 #include <stdio.h>
 #include <unistd.h>
 
-static int bz2_write(struct bsdiff_compressor* compressor, const void* buffer, int size)
+static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 {
 	bz_stream* bz2;
 	FILE* pf;
@@ -447,7 +447,7 @@ static int bz2_write(struct bsdiff_compressor* compressor, const void* buffer, i
 	int totalwritten;
 	char compress_buffer[4096];
 
-	bz2 = (bz_stream*)compressor->opaque;
+	bz2 = (bz_stream*)stream->opaque;
 	pf = (FILE*)bz2->opaque;
 
 	if (!bz2->state)
@@ -481,7 +481,7 @@ static int bz2_write(struct bsdiff_compressor* compressor, const void* buffer, i
 	}
 }
 
-static int bz2_finish(struct bsdiff_compressor* compressor)
+static int bz2_finish(struct bsdiff_stream* stream)
 {
 	int err;
 	int totalwritten;
@@ -489,7 +489,7 @@ static int bz2_finish(struct bsdiff_compressor* compressor)
 	FILE* pf;
 	char compress_buffer[4096];
 
-	bz2 = (bz_stream*)compressor->opaque;
+	bz2 = (bz_stream*)stream->opaque;
 	pf = (FILE*)bz2->opaque;
 
 	totalwritten = 0;
@@ -526,11 +526,11 @@ int main(int argc,char *argv[])
 	off_t oldsize,newsize;
 	struct bsdiff_header header;
 	FILE * pf;
-	struct bsdiff_compressor compressor;
+	struct bsdiff_stream stream;
 	bz_stream bz2 = {0};
-	compressor.opaque = &bz2;
-	compressor.write = bz2_write;
-	compressor.finish = bz2_finish;
+	stream.opaque = &bz2;
+	stream.write = bz2_write;
+	stream.finish = bz2_finish;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -562,7 +562,7 @@ int main(int argc,char *argv[])
 		err(1, "Failed to write header");
 
 	bz2.opaque = pf;
-	if (bsdiff(old, oldsize, new, newsize, &compressor, &header))
+	if (bsdiff(old, oldsize, new, newsize, &stream, &header))
 		err(1, "bsdiff");
 
 	if (fseek(pf, 0, SEEK_SET) ||
