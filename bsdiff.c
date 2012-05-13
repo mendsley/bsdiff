@@ -34,9 +34,9 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 struct bsdiff_header
 {
 	uint8_t signature[8];
-	uint64_t ctrl_block_length;
-	uint64_t diff_block_length;
-	uint64_t new_file_length;
+	uint8_t ctrl_block_length[8];
+	uint8_t diff_block_length[8];
+	uint8_t new_file_length[8];
 };
 
 struct bsdiff_compressor
@@ -278,9 +278,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 		??	??	Bzip2ed diff block
 		??	??	Bzip2ed extra block */
 	memcpy(req.header->signature,"BSDIFF40",sizeof(req.header->signature));
-	req.header->ctrl_block_length = 0;
-	req.header->diff_block_length = 0;
-	req.header->new_file_length = req.newsize;
+	offtout(req.newsize, req.header->new_file_length);
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;
@@ -365,9 +363,10 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	filelen += compresslen;
 
 	/* Compute size of compressed ctrl data */
-	req.header->ctrl_block_length = filelen;
+	offtout(filelen, req.header->ctrl_block_length);
 
 	/* Write compressed diff data */
+	filelen = 0;
 	compresslen = writecompressed(req.compressor, db, dblen);
 	if (compresslen == -1)
 		return -1;
@@ -378,7 +377,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	filelen += compresslen;
 
 	/* Compute size of compressed diff data */
-	req.header->diff_block_length = filelen - req.header->ctrl_block_length;
+	offtout(filelen, req.header->diff_block_length);
 
 	/* Write compressed extra data */
 	compresslen = writecompressed(req.compressor, eb, eblen);
