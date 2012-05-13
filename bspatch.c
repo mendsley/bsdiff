@@ -30,15 +30,16 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bspatch/bspatch.c,v 1.1 2005/08/06 01:59:
 
 #include <bzlib.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <err.h>
 #include <unistd.h>
 #include <fcntl.h>
 
-static off_t offtin(u_char *buf)
+static int64_t offtin(u_char *buf)
 {
-	off_t y;
+	int64_t y;
 
 	y=buf[7]&0x7F;
 	y=y*256;y+=buf[6];
@@ -64,10 +65,10 @@ int main(int argc,char * argv[])
 	ssize_t bzctrllen,bzdatalen;
 	u_char header[32],buf[8];
 	u_char *old, *new;
-	off_t oldpos,newpos;
-	off_t ctrl[3];
-	off_t lenread;
-	off_t i;
+	int64_t oldpos,newpos;
+	int64_t ctrl[3];
+	int64_t lenread;
+	int64_t i;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
