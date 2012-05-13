@@ -39,8 +39,6 @@ struct bsdiff_header
 	uint64_t new_file_length;
 };
 
-typedef int (*bsdiff_write)(void* file, const void* buffer, int size);
-
 struct bsdiff_compressor
 {
 	void* opaque;
