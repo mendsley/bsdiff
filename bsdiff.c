@@ -49,6 +49,7 @@ struct bsdiff_compressor
 
 #if !defined(BSDIFF_HEADER_ONLY)
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -207,6 +208,27 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
+static int64_t writecompressed(struct bsdiff_compressor* compressor, const void* buffer, int64_t length)
+{
+	int64_t result = 0;
+
+	while (length > 0)
+	{
+		const int smallsize = (int)MIN(length, INT_MAX);
+		const int writeresult = compressor->write(compressor, buffer, smallsize);
+		if (writeresult == -1)
+		{
+			return -1;
+		}
+
+		result += writeresult;
+		length -= smallsize;
+		buffer = (uint8_t*)buffer + smallsize;
+	}
+
+	return result;
+}
+
 struct bsdiff_request
 {
 	const uint8_t* old;
@@ -327,7 +349,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			compresslen = req.compressor->write(req.compressor, buf, sizeof(buf));
+			compresslen = writecompressed(req.compressor, buf, sizeof(buf));
 			if (compresslen == -1)
 				return -1;
 			filelen += compresslen;
@@ -346,7 +368,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	req.header->ctrl_block_length = filelen;
 
 	/* Write compressed diff data */
-	compresslen = req.compressor->write(req.compressor, db, dblen);
+	compresslen = writecompressed(req.compressor, db, dblen);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
@@ -359,7 +381,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	req.header->diff_block_length = filelen - req.header->ctrl_block_length;
 
 	/* Write compressed extra data */
-	compresslen = req.compressor->write(req.compressor, eb, eblen);
+	compresslen = writecompressed(req.compressor, eb, eblen);
 	if (compresslen == -1)
 		return -1;
 	compresslen = req.compressor->finish(req.compressor);
