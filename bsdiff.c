@@ -249,13 +249,11 @@ static int bsdiff_internal(const struct bsdiff_request req)
 {
 	int64_t *I,*V;
 	int64_t scan,pos,len;
-	int64_t compresslen, filelen;
 	int64_t lastscan,lastpos,lastoffset;
 	int64_t oldscore,scsc;
 	int64_t s,Sf,lenf,Sb,lenb;
 	int64_t overlap,Ss,lens;
 	int64_t i;
-	int64_t dblen,eblen;
 	uint8_t *db,*eb;
 	uint8_t buf[8 * 3];
 
@@ -267,22 +265,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 	db = req.db;
 	eb = req.eb;
-	dblen=0;
-	eblen=0;
-	filelen=0;
-
-	/* Header is
-		0	8	 "BSDIFF40"
-		8	8	length of bzip2ed ctrl block
-		16	8	length of bzip2ed diff block
-		24	8	length of new file */
-	/* File is
-		0	32	Header
-		32	??	Bzip2ed ctrl block
-		??	??	Bzip2ed diff block
-		??	??	Bzip2ed extra block */
-	memcpy(req.header->signature,"BSDIFF40",sizeof(req.header->signature));
-	req.header->new_file_length = req.newsize;
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;
@@ -340,56 +322,31 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			};
 
 			for(i=0;i<lenf;i++)
-				db[dblen+i]=req.new[lastscan+i]-req.old[lastpos+i];
+				db[i]=req.new[lastscan+i]-req.old[lastpos+i];
 			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
-				eb[eblen+i]=req.new[lastscan+lenf+i];
-
-			dblen+=lenf;
-			eblen+=(scan-lenb)-(lastscan+lenf);
+				eb[i]=req.new[lastscan+lenf+i];
 
 			offtout(lenf,buf);
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			compresslen = writedata(req.stream, buf, sizeof(buf));
-			if (compresslen == -1)
+			/* Write control data */
+			if (writedata(req.stream, buf, sizeof(buf)))
 				return -1;
-			filelen += compresslen;
+
+			/* Write diff data */
+			if (writedata(req.stream, db, lenf))
+				return -1;
+
+			/* Write extra data */
+			if (writedata(req.stream, eb, (scan-lenb)-(lastscan+lenf)))
+				return -1;
 
 			lastscan=scan-lenb;
 			lastpos=pos-lenb;
 			lastoffset=pos-scan;
 		};
 	};
-	compresslen = req.stream->finish(req.stream);
-	if (compresslen == -1)
-		return -1;
-	filelen += compresslen;
-
-	/* Compute size of compressed ctrl data */
-	req.header->ctrl_block_length = filelen;
-
-	/* Write compressed diff data */
-	filelen = 0;
-	compresslen = writedata(req.stream, db, dblen);
-	if (compresslen == -1)
-		return -1;
-	filelen += compresslen;
-	compresslen = req.stream->finish(req.stream);
-	if (compresslen == -1)
-		return -1;
-	filelen += compresslen;
-
-	/* Compute size of compressed diff data */
-	req.header->diff_block_length = filelen;
-
-	/* Write compressed extra data */
-	compresslen = writedata(req.stream, eb, eblen);
-	if (compresslen == -1)
-		return -1;
-	compresslen = req.stream->finish(req.stream);
-	if (compresslen == -1)
-		return -1;
 
 	return 0;
 }
@@ -447,7 +404,6 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 	bz_stream* bz2;
 	FILE* pf;
 	int err;
-	int totalwritten;
 	char compress_buffer[4096];
 
 	bz2 = (bz_stream*)stream->opaque;
@@ -462,7 +418,6 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 	bz2->next_in = (char*)buffer;
 	bz2->avail_in = size;
 
-	totalwritten = 0;
 	for (;;)
 	{
 		bz2->next_out = compress_buffer;
@@ -475,19 +430,16 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
 			if (written != fwrite(compress_buffer, 1, written, pf))
 				return -1;
-
-			totalwritten += written;
 		}
 
 		if (bz2->avail_in == 0)
-			return totalwritten;
+			return 0;
 	}
 }
 
 static int bz2_finish(struct bsdiff_stream* stream)
 {
 	int err;
-	int totalwritten;
 	bz_stream* bz2;
 	FILE* pf;
 	char compress_buffer[4096];
@@ -495,7 +447,6 @@ static int bz2_finish(struct bsdiff_stream* stream)
 	bz2 = (bz_stream*)stream->opaque;
 	pf = (FILE*)bz2->opaque;
 
-	totalwritten = 0;
 	for (;;)
 	{
 		bz2->next_out = compress_buffer;
@@ -510,8 +461,6 @@ static int bz2_finish(struct bsdiff_stream* stream)
 			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
 			if (written != fwrite(compress_buffer, 1, written, pf))
 				return -1;
-
-			totalwritten += written;
 		}
 
 		if (BZ_STREAM_END == err)
@@ -519,7 +468,7 @@ static int bz2_finish(struct bsdiff_stream* stream)
 	}
 
 	BZ2_bzCompressEnd(bz2);
-	return totalwritten;
+	return 0;
 }
 
 int main(int argc,char *argv[])
@@ -572,6 +521,14 @@ int main(int argc,char *argv[])
 	bz2.opaque = pf;
 	if (bsdiff(old, oldsize, new, newsize, &stream, &header))
 		err(1, "bsdiff");
+
+	if (stream.finish(&stream))
+		err(1, "stream.finish");
+
+	memcpy(header.signature, "BSDIFF40", sizeof(header.signature));
+	header.ctrl_block_length = 0;
+	header.diff_block_length = 0;
+	header.new_file_length = newsize;
 
 	if (fseek(pf, 0, SEEK_SET) ||
 		fwrite(&header.signature, sizeof(header.signature), 1, pf) != 1)

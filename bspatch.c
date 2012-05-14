@@ -43,9 +43,7 @@ struct bspatch_request
 	int64_t oldsize;
 	uint8_t* new;
 	int64_t newsize;
-	struct bspatch_stream control;
-	struct bspatch_stream diff;
-	struct bspatch_stream extra;
+	struct bspatch_stream stream;
 };
 
 int bspatch(const struct bspatch_request req);
@@ -82,7 +80,7 @@ int bspatch(const struct bspatch_request req)
 	while(newpos<req.newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			lenread = req.control.read(&req.control, buf, 8);
+			lenread = req.stream.read(&req.stream, buf, 8);
 			if (lenread != 8)
 				return -1;
 			ctrl[i]=offtin(buf);
@@ -93,7 +91,7 @@ int bspatch(const struct bspatch_request req)
 			return -1;
 
 		/* Read diff string */
-		lenread = req.diff.read(&req.diff, req.new + newpos, ctrl[0]);
+		lenread = req.stream.read(&req.stream, req.new + newpos, ctrl[0]);
 		if (lenread != ctrl[0])
 			return -1;
 
@@ -111,7 +109,7 @@ int bspatch(const struct bspatch_request req)
 			return -1;
 
 		/* Read extra string */
-		lenread = req.extra.read(&req.extra, req.new + newpos, ctrl[1]);
+		lenread = req.stream.read(&req.stream, req.new + newpos, ctrl[1]);
 		if (lenread != ctrl[1])
 			return -1;
 
@@ -185,39 +183,20 @@ int main(int argc,char * argv[])
 {
 	FILE * f;
 	int fd;
-	int cbz2err, dbz2err, ebz2err;
+	int bz2err;
 	ssize_t bzctrllen,bzdatalen;
 	uint8_t header[32];
 	uint8_t *old;
-	FILE *cpf, *dpf, *epf;
 	struct bspatch_request req;
-	struct bspatch_bz2_buffer cbz2;
-	struct bspatch_bz2_buffer dbz2;
-	struct bspatch_bz2_buffer ebz2;
+	struct bspatch_bz2_buffer bz2;
 
-	memset(&cbz2, 0, sizeof(cbz2));
-	memset(&dbz2, 0, sizeof(dbz2));
-	memset(&ebz2, 0, sizeof(ebz2));
+	memset(&bz2, 0, sizeof(bz2));
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
 	/* Open patch file */
 	if ((f = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-
-	/*
-	File format:
-		0	8	"BSDIFF40"
-		8	8	X
-		16	8	Y
-		24	8	sizeof(newfile)
-		32	X	bzip2(control block)
-		32+X	Y	bzip2(diff block)
-		32+X+Y	???	bzip2(extra block)
-	with control block a set of triples (x,y,z) meaning "add x bytes
-	from oldfile to x bytes from the diff block; copy y bytes from the
-	extra block; seek forwards in oldfile by z bytes".
-	*/
 
 	/* Read header */
 	if (fread(header, 1, 32, f) < 32) {
@@ -238,24 +217,6 @@ int main(int argc,char * argv[])
 		errx(1,"Corrupt patch\n");
 
 	/* Close patch file and re-open it via libbzip2 at the right places */
-	if (fclose(f))
-		err(1, "fclose(%s)", argv[3]);
-	if ((cpf = fopen(argv[3], "r")) == NULL)
-		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(cpf, 32, SEEK_SET))
-		err(1, "fseeko64(%s, %lld)", argv[3],
-		    (long long)32);
-	if ((dpf = fopen(argv[3], "r")) == NULL)
-		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(dpf, 32 + bzctrllen, SEEK_SET))
-		err(1, "fseeko64(%s, %lld)", argv[3],
-		    (long long)(32 + bzctrllen));
-	if ((epf = fopen(argv[3], "r")) == NULL)
-		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(epf, 32 + bzctrllen + bzdatalen, SEEK_SET))
-		err(1, "fseeko64(%s, %lld)", argv[3],
-		    (long long)(32 + bzctrllen + bzdatalen));
-
 	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
 		((req.oldsize=lseek(fd,0,SEEK_END))==-1) ||
 		((old=malloc(req.oldsize+1))==NULL) ||
@@ -265,30 +226,19 @@ int main(int argc,char * argv[])
 	req.old = old;
 	if((req.new=malloc(req.newsize+1))==NULL) err(1,NULL);
 
-	cbz2.pf = cpf;
-	req.control.opaque = &cbz2;
-	req.control.read = readcompress;
-	dbz2.pf = dpf;
-	req.diff.opaque = &dbz2;
-	req.diff.read = readcompress;
-	ebz2.pf = epf;
-	req.extra.opaque = &ebz2;
-	req.extra.read = readcompress;
+	bz2.pf = f;
+	req.stream.opaque = &bz2;
+	req.stream.read = readcompress;
 
-	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", cbz2err);
-	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", dbz2err);
-	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
+	if (BZ_OK != (bz2err = BZ2_bzDecompressInit(&bz2.bz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", bz2err);
 
 	if (bspatch(req))
 		err(1, "bspatch");
 
 	/* Clean up the bzip2 reads */
-	BZ2_bzDecompressEnd(&cbz2.bz2);
-	BZ2_bzDecompressEnd(&dbz2.bz2);
-	BZ2_bzDecompressEnd(&ebz2.bz2);
+	BZ2_bzDecompressEnd(&bz2.bz2);
+	fclose(f);
 
 	/* Write the new file */
 	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,0666))<0) ||
