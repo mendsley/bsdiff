@@ -121,7 +121,7 @@ int bspatch(const struct bspatch_request req)
 	return 0;
 }
 
-#if !defined(BSPATCH_LIBRARY)
+#if defined(BSPATCH_EXECUTABLE)
 
 #include <bzlib.h>
 #include <stdlib.h>

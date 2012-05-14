@@ -431,7 +431,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	return result;
 }
 
-#if !defined(BSDIFF_LIBRARY)
+#if defined(BSDIFF_EXECUTABLE)
 
 #include <sys/types.h>
 
