@@ -86,18 +86,18 @@ int bspatch(const struct bspatch_request req)
 		for(i=0;i<=2;i++) {
 			lenread = req.control.read(&req.control, buf, 8);
 			if (lenread != 8)
-				errx(1, "Corrupt patch\n");
+				return -1;
 			ctrl[i]=offtin(buf);
 		};
 
 		/* Sanity-check */
 		if(newpos+ctrl[0]>req.newsize)
-			errx(1,"Corrupt patch\n");
+			return -1;
 
 		/* Read diff string */
 		lenread = req.diff.read(&req.diff, req.new + newpos, ctrl[0]);
 		if (lenread != ctrl[0])
-			errx(1, "Corrupt patch\n");
+			return -1;
 
 		/* Add old data to diff string */
 		for(i=0;i<ctrl[0];i++)
@@ -110,12 +110,12 @@ int bspatch(const struct bspatch_request req)
 
 		/* Sanity-check */
 		if(newpos+ctrl[1]>req.newsize)
-			errx(1,"Corrupt patch\n");
+			return -1;
 
 		/* Read extra string */
 		lenread = req.extra.read(&req.extra, req.new + newpos, ctrl[1]);
 		if (lenread != ctrl[1])
-			errx(1, "Corrupt patch\n");
+			return -1;
 
 		/* Adjust pointers */
 		newpos+=ctrl[1];
