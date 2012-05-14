@@ -32,14 +32,6 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 #include <stddef.h>
 #include <stdint.h>
 
-struct bsdiff_header
-{
-	uint8_t signature[8];
-	uint64_t ctrl_block_length;
-	uint64_t diff_block_length;
-	uint64_t new_file_length;
-};
-
 struct bsdiff_stream
 {
 	void* opaque;
@@ -50,7 +42,7 @@ struct bsdiff_stream
 	int (*finish)(struct bsdiff_stream* stream);
 };
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream, struct bsdiff_header* header);
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream);
 
 #if !defined(BSDIFF_HEADER_ONLY)
 
@@ -240,7 +232,6 @@ struct bsdiff_request
 	const uint8_t* new;
 	int64_t newsize;
 	struct bsdiff_stream* stream;
-	struct bsdiff_header* header;
 	int64_t *I;
 	uint8_t *db, *eb;
 };
@@ -351,7 +342,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	return 0;
 }
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream, struct bsdiff_header* header)
+int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream)
 {
 	int result;
 	struct bsdiff_request req;
@@ -377,7 +368,6 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	req.new = new;
 	req.newsize = newsize;
 	req.stream = stream;
-	req.header = header;
 
 	result = bsdiff_internal(req);
 
@@ -476,7 +466,6 @@ int main(int argc,char *argv[])
 	int fd;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
-	struct bsdiff_header header;
 	uint8_t buf[8];
 	FILE * pf;
 	struct bsdiff_stream stream;
@@ -514,34 +503,18 @@ int main(int argc,char *argv[])
 	if ((pf = fopen(argv[3], "w")) == NULL)
 		err(1, "%s", argv[3]);
 
-	/* Save space for header */
-	if (fwrite(&header, sizeof(header), 1, pf) != 1)
+	/* Write header (signature+newsize)*/
+	offtout(newsize, buf);
+	if (fwrite("BSDIFF40", 8, 1, pf) != 1 ||
+		fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
 
 	bz2.opaque = pf;
-	if (bsdiff(old, oldsize, new, newsize, &stream, &header))
+	if (bsdiff(old, oldsize, new, newsize, &stream))
 		err(1, "bsdiff");
 
 	if (stream.finish(&stream))
 		err(1, "stream.finish");
-
-	memcpy(header.signature, "BSDIFF40", sizeof(header.signature));
-	header.ctrl_block_length = 0;
-	header.diff_block_length = 0;
-	header.new_file_length = newsize;
-
-	if (fseek(pf, 0, SEEK_SET) ||
-		fwrite(&header.signature, sizeof(header.signature), 1, pf) != 1)
-		err(1, "Failed to write header");
-	offtout(header.ctrl_block_length, buf);
-	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
-		err(1, "Failed to write header");
-	offtout(header.diff_block_length, buf);
-	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
-		err(1, "Failed to write header");
-	offtout(header.new_file_length, buf);
-	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
-		err(1, "Failed to write header");
 
 	if (fclose(pf))
 		err(1, "fclose");

@@ -184,8 +184,7 @@ int main(int argc,char * argv[])
 	FILE * f;
 	int fd;
 	int bz2err;
-	ssize_t bzctrllen,bzdatalen;
-	uint8_t header[32];
+	uint8_t header[16];
 	uint8_t *old;
 	struct bspatch_request req;
 	struct bspatch_bz2_buffer bz2;
@@ -199,7 +198,7 @@ int main(int argc,char * argv[])
 		err(1, "fopen(%s)", argv[3]);
 
 	/* Read header */
-	if (fread(header, 1, 32, f) < 32) {
+	if (fread(header, 1, 16, f) != 16) {
 		if (feof(f))
 			errx(1, "Corrupt patch\n");
 		err(1, "fread(%s)", argv[3]);
@@ -210,10 +209,8 @@ int main(int argc,char * argv[])
 		errx(1, "Corrupt patch\n");
 
 	/* Read lengths from header */
-	bzctrllen=offtin(header+8);
-	bzdatalen=offtin(header+16);
-	req.newsize=offtin(header+24);
-	if((bzctrllen<0) || (bzdatalen<0) || (req.newsize<0))
+	req.newsize=offtin(header+8);
+	if(req.newsize<0)
 		errx(1,"Corrupt patch\n");
 
 	/* Close patch file and re-open it via libbzip2 at the right places */
