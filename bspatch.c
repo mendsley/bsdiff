@@ -40,9 +40,9 @@ struct bspatch_stream
 struct bspatch_request
 {
 	const uint8_t* old;
-	int oldsize;
+	int64_t oldsize;
 	uint8_t* new;
-	int newsize;
+	int64_t newsize;
 	struct bspatch_stream control;
 	struct bspatch_stream diff;
 	struct bspatch_stream extra;
