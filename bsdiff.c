@@ -35,9 +35,9 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bsdiff/bsdiff.c,v 1.1 2005/08/06 01:59:05
 struct bsdiff_header
 {
 	uint8_t signature[8];
-	uint8_t ctrl_block_length[8];
-	uint8_t diff_block_length[8];
-	uint8_t new_file_length[8];
+	uint64_t ctrl_block_length;
+	uint64_t diff_block_length;
+	uint64_t new_file_length;
 };
 
 struct bsdiff_stream
@@ -282,7 +282,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 		??	??	Bzip2ed diff block
 		??	??	Bzip2ed extra block */
 	memcpy(req.header->signature,"BSDIFF40",sizeof(req.header->signature));
-	offtout(req.newsize, req.header->new_file_length);
+	req.header->new_file_length = req.newsize;
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;
@@ -367,7 +367,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	filelen += compresslen;
 
 	/* Compute size of compressed ctrl data */
-	offtout(filelen, req.header->ctrl_block_length);
+	req.header->ctrl_block_length = filelen;
 
 	/* Write compressed diff data */
 	filelen = 0;
@@ -381,7 +381,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	filelen += compresslen;
 
 	/* Compute size of compressed diff data */
-	offtout(filelen, req.header->diff_block_length);
+	req.header->diff_block_length = filelen;
 
 	/* Write compressed extra data */
 	compresslen = writecompressed(req.stream, eb, eblen);
@@ -528,6 +528,7 @@ int main(int argc,char *argv[])
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
 	struct bsdiff_header header;
+	uint8_t buf[8];
 	FILE * pf;
 	struct bsdiff_stream stream;
 	bz_stream bz2;
@@ -573,7 +574,16 @@ int main(int argc,char *argv[])
 		err(1, "bsdiff");
 
 	if (fseek(pf, 0, SEEK_SET) ||
-		fwrite(&header, sizeof(header), 1, pf) != 1)
+		fwrite(&header.signature, sizeof(header.signature), 1, pf) != 1)
+		err(1, "Failed to write header");
+	offtout(header.ctrl_block_length, buf);
+	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
+		err(1, "Failed to write header");
+	offtout(header.diff_block_length, buf);
+	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
+		err(1, "Failed to write header");
+	offtout(header.new_file_length, buf);
+	if (fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
 
 	if (fclose(pf))
