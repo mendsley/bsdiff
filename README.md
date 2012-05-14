@@ -34,13 +34,26 @@ The overarching goal was to modify the original bsdiff/bspatch code from Colin
 and eliminate external dependencies and provide a simple interface to the core
 functionality.
 
-You can defined `BSDIFF_HEADER_ONLY` or `BSPATCH_HEADER_ONLY` to only include
+You can define `BSDIFF_HEADER_ONLY` or `BSPATCH_HEADER_ONLY` to only include
 the header parts of the file. If including a `.c` file makes you feel really
 dirty you can copy paste the header portion at the top of the file into your own
 `.h` file.
 
 I've exposed relevant functions via the `_stream` classes. The only external
 dependency not exposed is `memcmp` in `bsdiff`.
+
+Compiling
+---------
+The libraries should compile warning free in any moderately recent version of
+gcc. The project uses `<stdint.h>` which is technically a C99 file and not
+available in Microsoft Visual Studio. The easiest solution here is to use the
+msinttypes version of stdint.h from <https://code.google.com/p/msinttypes/>.
+The direct link for the lazy people is:
+<https://msinttypes.googlecode.com/svn/trunk/stdint.h>.
+
+If your compiler does not provide an implementation of `<stdint.h>` you can
+remove the header from the bsdiff/bspatch files and provide your own typedefs
+for the following symbols: `uint8_t`, `uint64_t` and `int64_t`.
 
 Examples
 --------
