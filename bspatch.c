@@ -48,6 +48,8 @@ struct bspatch_request
 	struct bspatch_stream extra;
 };
 
+int bspatch(const struct bspatch_request req);
+
 #if !defined(BSPATCH_HEADER_ONLY)
 
 static int64_t offtin(uint8_t *buf)
