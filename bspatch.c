@@ -190,7 +190,7 @@ int main(int argc,char * argv[])
 	req.stream.read = bz2_read;
 	req.stream.opaque = bz2;
 	if (bspatch(req))
-		err(1, "bspatch");
+		errx(1, "bspatch");
 
 	/* Clean up the bzip2 reads */
 	BZ2_bzReadClose(&bz2err, bz2);
