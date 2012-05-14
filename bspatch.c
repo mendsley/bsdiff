@@ -28,14 +28,7 @@
 __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bspatch/bspatch.c,v 1.1 2005/08/06 01:59:06 cperciva Exp $");
 #endif
 
-#include <bzlib.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 struct bspatch_stream
 {
@@ -124,6 +117,17 @@ int bspatch(const struct bspatch_request req)
 
 	return 0;
 }
+
+#if !defined(BSPATCH_LIBRARY)
+
+#include <bzlib.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <err.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 4096
 struct bspatch_bz2_buffer
@@ -287,3 +291,5 @@ int main(int argc,char * argv[])
 
 	return 0;
 }
+
+#endif
