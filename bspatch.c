@@ -37,6 +37,12 @@ __FBSDID("$FreeBSD: src/usr.bin/bsdiff/bspatch/bspatch.c,v 1.1 2005/08/06 01:59:
 #include <unistd.h>
 #include <fcntl.h>
 
+struct bspatch_stream
+{
+	void* opaque;
+	int (*read)(const struct bspatch_stream* stream, void* buffer, int length);
+};
+
 struct bspatch_request
 {
 	const uint8_t* old;
@@ -66,25 +72,33 @@ static int64_t offtin(uint8_t *buf)
 	return y;
 }
 
-static const int BUFFER_SIZE = 4096;
+#define BUFFER_SIZE 4096
+struct bspatch_bz2_buffer
+{
+	FILE* pf;
+	bz_stream bz2;
+	char buffer[BUFFER_SIZE];
+};
 
-static int readcompress(bz_stream* bz2, FILE* pf, uint8_t* dest, int length)
+static int readcompress(const struct bspatch_stream* stream, void* buffer, int length)
 {
 	int n;
 	int ret;
+	struct bspatch_bz2_buffer* buf = (struct bspatch_bz2_buffer*)stream->opaque;
+	bz_stream* bz2 = &buf->bz2;
 
-	bz2->next_out = (char*)dest;
+	bz2->next_out = (char*)buffer;
 	bz2->avail_out = length;
 
 	for (;;)
 	{
-		if (bz2->avail_in == 0 && !feof(pf) && bz2->avail_out > 0)
+		if (bz2->avail_in == 0 && !feof(buf->pf) && bz2->avail_out > 0)
 		{
-			n = fread(bz2->opaque, 1, BUFFER_SIZE, pf);
-			if (ferror(pf))
+			n = fread(buf->buffer, 1, BUFFER_SIZE, buf->pf);
+			if (ferror(buf->pf))
 				return -1;
 
-			bz2->next_in = bz2->opaque;
+			bz2->next_in = buf->buffer;
 			bz2->avail_in = n;
 		}
 
@@ -92,7 +106,7 @@ static int readcompress(bz_stream* bz2, FILE* pf, uint8_t* dest, int length)
 		if (ret != BZ_OK && ret != BZ_STREAM_END)
 			return -1;
 
-		if (ret == BZ_OK && feof(pf) && bz2->avail_in == 0 && bz2->avail_out > 0)
+		if (ret == BZ_OK && feof(buf->pf) && bz2->avail_in == 0 && bz2->avail_out > 0)
 			return -1;
 
 		if (ret == BZ_STREAM_END)
@@ -107,10 +121,12 @@ static int readcompress(bz_stream* bz2, FILE* pf, uint8_t* dest, int length)
 
 int bspatch(const struct bspatch_request req)
 {
-	bz_stream cbz2 = {0};
-	bz_stream dbz2 = {0};
-	bz_stream ebz2 = {0};
-	char cbuf[BUFFER_SIZE], dbuf[BUFFER_SIZE], ebuf[BUFFER_SIZE];
+	struct bspatch_stream cstream;
+	struct bspatch_stream dstream;
+	struct bspatch_stream estream;
+	struct bspatch_bz2_buffer cbz2 = {0};
+	struct bspatch_bz2_buffer dbz2 = {0};
+	struct bspatch_bz2_buffer ebz2 = {0};
 	int cbz2err, dbz2err, ebz2err;
 	uint8_t buf[8];
 	int64_t oldpos,newpos;
@@ -118,22 +134,28 @@ int bspatch(const struct bspatch_request req)
 	int64_t lenread;
 	int64_t i;
 
-	cbz2.opaque = cbuf;
-	dbz2.opaque = dbuf;
-	ebz2.opaque = ebuf;
+	cbz2.pf = req.cpf;
+	cstream.opaque = &cbz2;
+	cstream.read = readcompress;
+	dbz2.pf = req.dpf;
+	dstream.opaque = &dbz2;
+	dstream.read = readcompress;
+	ebz2.pf = req.epf;
+	estream.opaque = &ebz2;
+	estream.read = readcompress;
 
-	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2, 0, 0)))
+	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2.bz2, 0, 0)))
 		errx(1, "BZ2_bzDecompressInit, bz2err = %d", cbz2err);
-	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2, 0, 0)))
+	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2.bz2, 0, 0)))
 		errx(1, "BZ2_bzDecompressInit, bz2err = %d", dbz2err);
-	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2, 0, 0)))
+	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2.bz2, 0, 0)))
 		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
 
 	oldpos=0;newpos=0;
 	while(newpos<req.newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			lenread = readcompress(&cbz2, req.cpf, buf, 8);
+			lenread = cstream.read(&cstream, buf, 8);
 			if (lenread != 8)
 				errx(1, "Corrupt patch\n");
 			ctrl[i]=offtin(buf);
@@ -144,7 +166,7 @@ int bspatch(const struct bspatch_request req)
 			errx(1,"Corrupt patch\n");
 
 		/* Read diff string */
-		lenread = readcompress(&dbz2, req.dpf, req.new + newpos, ctrl[0]);
+		lenread = dstream.read(&dstream, req.new + newpos, ctrl[0]);
 		if (lenread != ctrl[0])
 			errx(1, "Corrupt patch\n");
 
@@ -162,7 +184,7 @@ int bspatch(const struct bspatch_request req)
 			errx(1,"Corrupt patch\n");
 
 		/* Read extra string */
-		lenread = readcompress(&ebz2, req.epf, req.new + newpos, ctrl[1]);
+		lenread = estream.read(&estream, req.new + newpos, ctrl[1]);
 		if (lenread != ctrl[1])
 			errx(1, "Corrupt patch\n");
 
@@ -172,9 +194,9 @@ int bspatch(const struct bspatch_request req)
 	};
 
 	/* Clean up the bzip2 reads */
-	BZ2_bzDecompressEnd(&cbz2);
-	BZ2_bzDecompressEnd(&dbz2);
-	BZ2_bzDecompressEnd(&ebz2);
+	BZ2_bzDecompressEnd(&cbz2.bz2);
+	BZ2_bzDecompressEnd(&dbz2.bz2);
+	BZ2_bzDecompressEnd(&ebz2.bz2);
 
 	return 0;
 }
