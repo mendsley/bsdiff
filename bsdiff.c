@@ -212,7 +212,7 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int64_t writecompressed(struct bsdiff_stream* stream, const void* buffer, int64_t length)
+static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length)
 {
 	int64_t result = 0;
 
@@ -351,7 +351,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-			compresslen = writecompressed(req.stream, buf, sizeof(buf));
+			compresslen = writedata(req.stream, buf, sizeof(buf));
 			if (compresslen == -1)
 				return -1;
 			filelen += compresslen;
@@ -371,7 +371,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 	/* Write compressed diff data */
 	filelen = 0;
-	compresslen = writecompressed(req.stream, db, dblen);
+	compresslen = writedata(req.stream, db, dblen);
 	if (compresslen == -1)
 		return -1;
 	filelen += compresslen;
@@ -384,7 +384,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	req.header->diff_block_length = filelen;
 
 	/* Write compressed extra data */
-	compresslen = writecompressed(req.stream, eb, eblen);
+	compresslen = writedata(req.stream, eb, eblen);
 	if (compresslen == -1)
 		return -1;
 	compresslen = req.stream->finish(req.stream);
