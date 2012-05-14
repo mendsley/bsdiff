@@ -472,7 +472,7 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 
 		if (bz2->avail_out < sizeof(compress_buffer))
 		{
-			const int written = sizeof(compress_buffer) - bz2->avail_out;
+			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
 			if (written != fwrite(compress_buffer, 1, written, pf))
 				return -1;
 
@@ -507,7 +507,7 @@ static int bz2_finish(struct bsdiff_stream* stream)
 
 		if (bz2->avail_out < sizeof(compress_buffer))
 		{
-			const int written = sizeof(compress_buffer) - bz2->avail_out;
+			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
 			if (written != fwrite(compress_buffer, 1, written, pf))
 				return -1;
 
@@ -530,7 +530,9 @@ int main(int argc,char *argv[])
 	struct bsdiff_header header;
 	FILE * pf;
 	struct bsdiff_stream stream;
-	bz_stream bz2 = {0};
+	bz_stream bz2;
+
+	memset(&bz2, 0, sizeof(bz2));
 	stream.malloc = malloc;
 	stream.free = free;
 	stream.opaque = &bz2;
@@ -584,6 +586,6 @@ int main(int argc,char *argv[])
 	return 0;
 }
 
-#endif //BSDIFF_LIBRARY
+#endif
 
-#endif // BSDIFF_HEADER_ONLY
+#endif
