@@ -35,7 +35,6 @@ struct bsdiff_stream
 	void* (*malloc)(size_t size);
 	void (*free)(void* ptr);
 	int (*write)(struct bsdiff_stream* stream, const void* buffer, int size);
-	int (*finish)(struct bsdiff_stream* stream);
 };
 
 int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream);
@@ -472,7 +471,6 @@ int main(int argc,char *argv[])
 	stream.free = free;
 	stream.opaque = &bz2;
 	stream.write = bz2_write;
-	stream.finish = bz2_finish;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -509,7 +507,7 @@ int main(int argc,char *argv[])
 	if (bsdiff(old, oldsize, new, newsize, &stream))
 		err(1, "bsdiff");
 
-	if (stream.finish(&stream))
+	if (bz2_finish(&stream))
 		err(1, "stream.finish");
 
 	if (fclose(pf))
