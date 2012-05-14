@@ -376,90 +376,31 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 
 static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 {
-	bz_stream* bz2;
-	FILE* pf;
-	int err;
-	char compress_buffer[4096];
+	int bz2err;
+	BZFILE* bz2;
 
-	bz2 = (bz_stream*)stream->opaque;
-	pf = (FILE*)bz2->opaque;
+	bz2 = (BZFILE*)stream->opaque;
+	BZ2_bzWrite(&bz2err, bz2, (void*)buffer, size);
+	if (bz2err != BZ_STREAM_END && bz2err != BZ_OK)
+		return -1;
 
-	if (!bz2->state)
-	{
-		if (BZ_OK != BZ2_bzCompressInit(bz2, 9, 0, 0))
-			return -1;
-	}
-
-	bz2->next_in = (char*)buffer;
-	bz2->avail_in = size;
-
-	for (;;)
-	{
-		bz2->next_out = compress_buffer;
-		bz2->avail_out = sizeof(compress_buffer);
-		if (BZ_RUN_OK != (err = BZ2_bzCompress(bz2, BZ_RUN)))
-			return -1;
-
-		if (bz2->avail_out < sizeof(compress_buffer))
-		{
-			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
-			if (written != fwrite(compress_buffer, 1, written, pf))
-				return -1;
-		}
-
-		if (bz2->avail_in == 0)
-			return 0;
-	}
-}
-
-static int bz2_finish(struct bsdiff_stream* stream)
-{
-	int err;
-	bz_stream* bz2;
-	FILE* pf;
-	char compress_buffer[4096];
-
-	bz2 = (bz_stream*)stream->opaque;
-	pf = (FILE*)bz2->opaque;
-
-	for (;;)
-	{
-		bz2->next_out = compress_buffer;
-		bz2->avail_out = sizeof(compress_buffer);
-
-		err = BZ2_bzCompress(bz2, BZ_FINISH);
-		if (BZ_FINISH_OK != err && BZ_STREAM_END != err)
-			return -1;
-
-		if (bz2->avail_out < sizeof(compress_buffer))
-		{
-			const size_t written = sizeof(compress_buffer) - bz2->avail_out;
-			if (written != fwrite(compress_buffer, 1, written, pf))
-				return -1;
-		}
-
-		if (BZ_STREAM_END == err)
-			break;
-	}
-
-	BZ2_bzCompressEnd(bz2);
 	return 0;
 }
 
 int main(int argc,char *argv[])
 {
 	int fd;
+	int bz2err;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
 	uint8_t buf[8];
 	FILE * pf;
 	struct bsdiff_stream stream;
-	bz_stream bz2;
+	BZFILE* bz2;
 
 	memset(&bz2, 0, sizeof(bz2));
 	stream.malloc = malloc;
 	stream.free = free;
-	stream.opaque = &bz2;
 	stream.write = bz2_write;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
@@ -493,12 +434,17 @@ int main(int argc,char *argv[])
 		fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
 
-	bz2.opaque = pf;
+
+	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
+		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
+
+	stream.opaque = bz2;
 	if (bsdiff(old, oldsize, new, newsize, &stream))
 		err(1, "bsdiff");
 
-	if (bz2_finish(&stream))
-		err(1, "stream.finish");
+	BZ2_bzWriteClose(&bz2err, bz2, 0, NULL, NULL);
+	if (bz2err != BZ_OK)
+		err(1, "BZ2_bzWriteClose, bz2err=%d", bz2err);
 
 	if (fclose(pf))
 		err(1, "fclose");

@@ -128,51 +128,18 @@ int bspatch(const struct bspatch_request req)
 #include <unistd.h>
 #include <fcntl.h>
 
-#define BUFFER_SIZE 4096
-struct bspatch_bz2_buffer
-{
-	FILE* pf;
-	bz_stream bz2;
-	char buffer[BUFFER_SIZE];
-};
-
-static int readcompress(const struct bspatch_stream* stream, void* buffer, int length)
+static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
 {
 	int n;
-	int ret;
-	struct bspatch_bz2_buffer* buf = (struct bspatch_bz2_buffer*)stream->opaque;
-	bz_stream* bz2 = &buf->bz2;
+	int bz2err;
+	BZFILE* bz2;
 
-	bz2->next_out = (char*)buffer;
-	bz2->avail_out = length;
+	bz2 = (BZFILE*)stream->opaque;
+	n = BZ2_bzRead(&bz2err, bz2, buffer, length);
+	if (n == 0)
+		return -1;
 
-	for (;;)
-	{
-		if (bz2->avail_in == 0 && !feof(buf->pf) && bz2->avail_out > 0)
-		{
-			n = fread(buf->buffer, 1, BUFFER_SIZE, buf->pf);
-			if (ferror(buf->pf))
-				return -1;
-
-			bz2->next_in = buf->buffer;
-			bz2->avail_in = n;
-		}
-
-		ret = BZ2_bzDecompress(bz2);
-		if (ret != BZ_OK && ret != BZ_STREAM_END)
-			return -1;
-
-		if (ret == BZ_OK && feof(buf->pf) && bz2->avail_in == 0 && bz2->avail_out > 0)
-			return -1;
-
-		if (ret == BZ_STREAM_END)
-			return length - bz2->avail_out;
-		if (bz2->avail_out == 0)
-			return length;
-	}
-
-	// unreachable
-	return -1;
+	return n;
 }
 
 int main(int argc,char * argv[])
@@ -182,10 +149,8 @@ int main(int argc,char * argv[])
 	int bz2err;
 	uint8_t header[16];
 	uint8_t *old;
+	BZFILE* bz2;
 	struct bspatch_request req;
-	struct bspatch_bz2_buffer bz2;
-
-	memset(&bz2, 0, sizeof(bz2));
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -219,18 +184,16 @@ int main(int argc,char * argv[])
 	req.old = old;
 	if((req.new=malloc(req.newsize+1))==NULL) err(1,NULL);
 
-	bz2.pf = f;
-	req.stream.opaque = &bz2;
-	req.stream.read = readcompress;
+	if (NULL == (bz2 = BZ2_bzReadOpen(&bz2err, f, 0, 0, NULL, 0)))
+		errx(1, "BZ2_bzReadOpen, bz2err=%d", bz2err);
 
-	if (BZ_OK != (bz2err = BZ2_bzDecompressInit(&bz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", bz2err);
-
+	req.stream.read = bz2_read;
+	req.stream.opaque = bz2;
 	if (bspatch(req))
 		err(1, "bspatch");
 
 	/* Clean up the bzip2 reads */
-	BZ2_bzDecompressEnd(&bz2.bz2);
+	BZ2_bzReadClose(&bz2err, bz2);
 	fclose(f);
 
 	/* Write the new file */
