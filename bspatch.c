@@ -69,15 +69,13 @@ int bspatch(const struct bspatch_request req)
 	uint8_t buf[8];
 	int64_t oldpos,newpos;
 	int64_t ctrl[3];
-	int64_t lenread;
 	int64_t i;
 
 	oldpos=0;newpos=0;
 	while(newpos<req.newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			lenread = req.stream.read(&req.stream, buf, 8);
-			if (lenread != 8)
+			if (req.stream.read(&req.stream, buf, 8))
 				return -1;
 			ctrl[i]=offtin(buf);
 		};
@@ -87,8 +85,7 @@ int bspatch(const struct bspatch_request req)
 			return -1;
 
 		/* Read diff string */
-		lenread = req.stream.read(&req.stream, req.new + newpos, ctrl[0]);
-		if (lenread != ctrl[0])
+		if (req.stream.read(&req.stream, req.new + newpos, ctrl[0]))
 			return -1;
 
 		/* Add old data to diff string */
@@ -105,8 +102,7 @@ int bspatch(const struct bspatch_request req)
 			return -1;
 
 		/* Read extra string */
-		lenread = req.stream.read(&req.stream, req.new + newpos, ctrl[1]);
-		if (lenread != ctrl[1])
+		if (req.stream.read(&req.stream, req.new + newpos, ctrl[1]))
 			return -1;
 
 		/* Adjust pointers */
@@ -136,10 +132,10 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
 
 	bz2 = (BZFILE*)stream->opaque;
 	n = BZ2_bzRead(&bz2err, bz2, buffer, length);
-	if (n == 0)
+	if (n != length)
 		return -1;
 
-	return n;
+	return 0;
 }
 
 int main(int argc,char * argv[])
