@@ -228,7 +228,7 @@ struct bsdiff_request
 	int64_t newsize;
 	struct bsdiff_stream* stream;
 	int64_t *I;
-	uint8_t *db, *eb;
+	uint8_t *buffer;
 };
 
 static int bsdiff_internal(const struct bsdiff_request req)
@@ -240,7 +240,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	int64_t s,Sf,lenf,Sb,lenb;
 	int64_t overlap,Ss,lens;
 	int64_t i;
-	uint8_t *db,*eb;
+	uint8_t *buffer;
 	uint8_t buf[8 * 3];
 
 	if((V=req.stream->malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
@@ -249,8 +249,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	qsufsort(I,V,req.old,req.oldsize);
 	req.stream->free(V);
 
-	db = req.db;
-	eb = req.eb;
+	buffer = req.buffer;
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;
@@ -307,11 +306,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				lenb-=lens;
 			};
 
-			for(i=0;i<lenf;i++)
-				db[i]=req.new[lastscan+i]-req.old[lastpos+i];
-			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
-				eb[i]=req.new[lastscan+lenf+i];
-
 			offtout(lenf,buf);
 			offtout((scan-lenb)-(lastscan+lenf),buf+8);
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
@@ -321,11 +315,15 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				return -1;
 
 			/* Write diff data */
-			if (writedata(req.stream, db, lenf))
+			for(i=0;i<lenf;i++)
+				buffer[i]=req.new[lastscan+i]-req.old[lastpos+i];
+			if (writedata(req.stream, buffer, lenf))
 				return -1;
 
 			/* Write extra data */
-			if (writedata(req.stream, eb, (scan-lenb)-(lastscan+lenf)))
+			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
+				buffer[i]=req.new[lastscan+lenf+i];
+			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf)))
 				return -1;
 
 			lastscan=scan-lenb;
@@ -345,15 +343,8 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	if((req.I=stream->malloc((oldsize+1)*sizeof(int64_t)))==NULL)
 		return -1;
 
-	if((req.db=stream->malloc(newsize+1))==NULL)
+	if((req.buffer=stream->malloc(newsize+1))==NULL)
 	{
-		stream->free(req.I);
-		return -1;
-	}
-
-	if((req.eb=stream->malloc(newsize+1))==NULL)
-	{
-		stream->free(req.db);
 		stream->free(req.I);
 		return -1;
 	}
@@ -366,8 +357,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 
 	result = bsdiff_internal(req);
 
-	stream->free(req.eb);
-	stream->free(req.db);
+	stream->free(req.buffer);
 	stream->free(req.I);
 
 	return result;
