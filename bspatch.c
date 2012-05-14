@@ -47,6 +47,8 @@ struct bspatch_request
 	struct bspatch_stream extra;
 };
 
+#if !defined(BSPATCH_HEADER_ONLY)
+
 static int64_t offtin(uint8_t *buf)
 {
 	int64_t y;
@@ -292,4 +294,5 @@ int main(int argc,char * argv[])
 	return 0;
 }
 
+#endif
 #endif
