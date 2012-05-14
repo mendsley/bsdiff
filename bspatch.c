@@ -188,9 +188,13 @@ int main(int argc,char * argv[])
 	uint8_t *old;
 	FILE *cpf, *dpf, *epf;
 	struct bspatch_request req;
-	struct bspatch_bz2_buffer cbz2 = {0};
-	struct bspatch_bz2_buffer dbz2 = {0};
-	struct bspatch_bz2_buffer ebz2 = {0};
+	struct bspatch_bz2_buffer cbz2;
+	struct bspatch_bz2_buffer dbz2;
+	struct bspatch_bz2_buffer ebz2;
+
+	memset(&cbz2, 0, sizeof(cbz2));
+	memset(&dbz2, 0, sizeof(dbz2));
+	memset(&ebz2, 0, sizeof(ebz2));
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
