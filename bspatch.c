@@ -33,16 +33,7 @@ struct bspatch_stream
 	int (*read)(const struct bspatch_stream* stream, void* buffer, int length);
 };
 
-struct bspatch_request
-{
-	const uint8_t* old;
-	int64_t oldsize;
-	uint8_t* new;
-	int64_t newsize;
-	struct bspatch_stream stream;
-};
-
-int bspatch(const struct bspatch_request req);
+int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream);
 
 #if !defined(BSPATCH_HEADER_ONLY)
 
@@ -64,7 +55,7 @@ static int64_t offtin(uint8_t *buf)
 	return y;
 }
 
-int bspatch(const struct bspatch_request req)
+int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream)
 {
 	uint8_t buf[8];
 	int64_t oldpos,newpos;
@@ -72,37 +63,37 @@ int bspatch(const struct bspatch_request req)
 	int64_t i;
 
 	oldpos=0;newpos=0;
-	while(newpos<req.newsize) {
+	while(newpos<newsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			if (req.stream.read(&req.stream, buf, 8))
+			if (stream->read(stream, buf, 8))
 				return -1;
 			ctrl[i]=offtin(buf);
 		};
 
 		/* Sanity-check */
-		if(newpos+ctrl[0]>req.newsize)
+		if(newpos+ctrl[0]>newsize)
 			return -1;
 
 		/* Read diff string */
-		if (req.stream.read(&req.stream, req.new + newpos, ctrl[0]))
+		if (stream->read(stream, new + newpos, ctrl[0]))
 			return -1;
 
 		/* Add old data to diff string */
 		for(i=0;i<ctrl[0];i++)
-			if((oldpos+i>=0) && (oldpos+i<req.oldsize))
-				req.new[newpos+i]+=req.old[oldpos+i];
+			if((oldpos+i>=0) && (oldpos+i<oldsize))
+				new[newpos+i]+=old[oldpos+i];
 
 		/* Adjust pointers */
 		newpos+=ctrl[0];
 		oldpos+=ctrl[0];
 
 		/* Sanity-check */
-		if(newpos+ctrl[1]>req.newsize)
+		if(newpos+ctrl[1]>newsize)
 			return -1;
 
 		/* Read extra string */
-		if (req.stream.read(&req.stream, req.new + newpos, ctrl[1]))
+		if (stream->read(stream, new + newpos, ctrl[1]))
 			return -1;
 
 		/* Adjust pointers */
@@ -144,9 +135,10 @@ int main(int argc,char * argv[])
 	int fd;
 	int bz2err;
 	uint8_t header[16];
-	uint8_t *old;
+	uint8_t *old, *new;
+	int64_t oldsize, newsize;
 	BZFILE* bz2;
-	struct bspatch_request req;
+	struct bspatch_stream stream;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -166,26 +158,25 @@ int main(int argc,char * argv[])
 		errx(1, "Corrupt patch\n");
 
 	/* Read lengths from header */
-	req.newsize=offtin(header+8);
-	if(req.newsize<0)
+	newsize=offtin(header+8);
+	if(newsize<0)
 		errx(1,"Corrupt patch\n");
 
 	/* Close patch file and re-open it via libbzip2 at the right places */
 	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
-		((req.oldsize=lseek(fd,0,SEEK_END))==-1) ||
-		((old=malloc(req.oldsize+1))==NULL) ||
+		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
+		((old=malloc(oldsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,req.oldsize)!=req.oldsize) ||
+		(read(fd,old,oldsize)!=oldsize) ||
 		(close(fd)==-1)) err(1,"%s",argv[1]);
-	req.old = old;
-	if((req.new=malloc(req.newsize+1))==NULL) err(1,NULL);
+	if((new=malloc(newsize+1))==NULL) err(1,NULL);
 
 	if (NULL == (bz2 = BZ2_bzReadOpen(&bz2err, f, 0, 0, NULL, 0)))
 		errx(1, "BZ2_bzReadOpen, bz2err=%d", bz2err);
 
-	req.stream.read = bz2_read;
-	req.stream.opaque = bz2;
-	if (bspatch(req))
+	stream.read = bz2_read;
+	stream.opaque = bz2;
+	if (bspatch(old, oldsize, new, newsize, &stream))
 		errx(1, "bspatch");
 
 	/* Clean up the bzip2 reads */
@@ -194,10 +185,10 @@ int main(int argc,char * argv[])
 
 	/* Write the new file */
 	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,0666))<0) ||
-		(write(fd,req.new,req.newsize)!=req.newsize) || (close(fd)==-1))
+		(write(fd,new,newsize)!=newsize) || (close(fd)==-1))
 		err(1,"%s",argv[2]);
 
-	free(req.new);
+	free(new);
 	free(old);
 
 	return 0;
