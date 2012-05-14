@@ -46,7 +46,7 @@ struct bsdiff_stream
 
 	void* (*malloc)(size_t size);
 	void (*free)(void* ptr);
-	int (*write)(struct bsdiff_stream* compresor, const void* buffer, int size);
+	int (*write)(struct bsdiff_stream* stream, const void* buffer, int size);
 	int (*finish)(struct bsdiff_stream* stream);
 };
 
