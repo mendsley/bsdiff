@@ -49,9 +49,9 @@ struct bspatch_request
 	int oldsize;
 	uint8_t* new;
 	int newsize;
-	FILE* cpf;
-	FILE* dpf;
-	FILE* epf;
+	struct bspatch_stream control;
+	struct bspatch_stream diff;
+	struct bspatch_stream extra;
 };
 
 static int64_t offtin(uint8_t *buf)
@@ -70,6 +70,59 @@ static int64_t offtin(uint8_t *buf)
 	if(buf[7]&0x80) y=-y;
 
 	return y;
+}
+
+int bspatch(const struct bspatch_request req)
+{
+	uint8_t buf[8];
+	int64_t oldpos,newpos;
+	int64_t ctrl[3];
+	int64_t lenread;
+	int64_t i;
+
+	oldpos=0;newpos=0;
+	while(newpos<req.newsize) {
+		/* Read control data */
+		for(i=0;i<=2;i++) {
+			lenread = req.control.read(&req.control, buf, 8);
+			if (lenread != 8)
+				errx(1, "Corrupt patch\n");
+			ctrl[i]=offtin(buf);
+		};
+
+		/* Sanity-check */
+		if(newpos+ctrl[0]>req.newsize)
+			errx(1,"Corrupt patch\n");
+
+		/* Read diff string */
+		lenread = req.diff.read(&req.diff, req.new + newpos, ctrl[0]);
+		if (lenread != ctrl[0])
+			errx(1, "Corrupt patch\n");
+
+		/* Add old data to diff string */
+		for(i=0;i<ctrl[0];i++)
+			if((oldpos+i>=0) && (oldpos+i<req.oldsize))
+				req.new[newpos+i]+=req.old[oldpos+i];
+
+		/* Adjust pointers */
+		newpos+=ctrl[0];
+		oldpos+=ctrl[0];
+
+		/* Sanity-check */
+		if(newpos+ctrl[1]>req.newsize)
+			errx(1,"Corrupt patch\n");
+
+		/* Read extra string */
+		lenread = req.extra.read(&req.extra, req.new + newpos, ctrl[1]);
+		if (lenread != ctrl[1])
+			errx(1, "Corrupt patch\n");
+
+		/* Adjust pointers */
+		newpos+=ctrl[1];
+		oldpos+=ctrl[2];
+	};
+
+	return 0;
 }
 
 #define BUFFER_SIZE 4096
@@ -119,96 +172,19 @@ static int readcompress(const struct bspatch_stream* stream, void* buffer, int l
 	return -1;
 }
 
-int bspatch(const struct bspatch_request req)
-{
-	struct bspatch_stream cstream;
-	struct bspatch_stream dstream;
-	struct bspatch_stream estream;
-	struct bspatch_bz2_buffer cbz2 = {0};
-	struct bspatch_bz2_buffer dbz2 = {0};
-	struct bspatch_bz2_buffer ebz2 = {0};
-	int cbz2err, dbz2err, ebz2err;
-	uint8_t buf[8];
-	int64_t oldpos,newpos;
-	int64_t ctrl[3];
-	int64_t lenread;
-	int64_t i;
-
-	cbz2.pf = req.cpf;
-	cstream.opaque = &cbz2;
-	cstream.read = readcompress;
-	dbz2.pf = req.dpf;
-	dstream.opaque = &dbz2;
-	dstream.read = readcompress;
-	ebz2.pf = req.epf;
-	estream.opaque = &ebz2;
-	estream.read = readcompress;
-
-	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", cbz2err);
-	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", dbz2err);
-	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2.bz2, 0, 0)))
-		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
-
-	oldpos=0;newpos=0;
-	while(newpos<req.newsize) {
-		/* Read control data */
-		for(i=0;i<=2;i++) {
-			lenread = cstream.read(&cstream, buf, 8);
-			if (lenread != 8)
-				errx(1, "Corrupt patch\n");
-			ctrl[i]=offtin(buf);
-		};
-
-		/* Sanity-check */
-		if(newpos+ctrl[0]>req.newsize)
-			errx(1,"Corrupt patch\n");
-
-		/* Read diff string */
-		lenread = dstream.read(&dstream, req.new + newpos, ctrl[0]);
-		if (lenread != ctrl[0])
-			errx(1, "Corrupt patch\n");
-
-		/* Add old data to diff string */
-		for(i=0;i<ctrl[0];i++)
-			if((oldpos+i>=0) && (oldpos+i<req.oldsize))
-				req.new[newpos+i]+=req.old[oldpos+i];
-
-		/* Adjust pointers */
-		newpos+=ctrl[0];
-		oldpos+=ctrl[0];
-
-		/* Sanity-check */
-		if(newpos+ctrl[1]>req.newsize)
-			errx(1,"Corrupt patch\n");
-
-		/* Read extra string */
-		lenread = estream.read(&estream, req.new + newpos, ctrl[1]);
-		if (lenread != ctrl[1])
-			errx(1, "Corrupt patch\n");
-
-		/* Adjust pointers */
-		newpos+=ctrl[1];
-		oldpos+=ctrl[2];
-	};
-
-	/* Clean up the bzip2 reads */
-	BZ2_bzDecompressEnd(&cbz2.bz2);
-	BZ2_bzDecompressEnd(&dbz2.bz2);
-	BZ2_bzDecompressEnd(&ebz2.bz2);
-
-	return 0;
-}
-
 int main(int argc,char * argv[])
 {
 	FILE * f;
 	int fd;
+	int cbz2err, dbz2err, ebz2err;
 	ssize_t bzctrllen,bzdatalen;
 	uint8_t header[32];
 	uint8_t *old;
+	FILE *cpf, *dpf, *epf;
 	struct bspatch_request req;
+	struct bspatch_bz2_buffer cbz2 = {0};
+	struct bspatch_bz2_buffer dbz2 = {0};
+	struct bspatch_bz2_buffer ebz2 = {0};
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -251,19 +227,19 @@ int main(int argc,char * argv[])
 	/* Close patch file and re-open it via libbzip2 at the right places */
 	if (fclose(f))
 		err(1, "fclose(%s)", argv[3]);
-	if ((req.cpf = fopen(argv[3], "r")) == NULL)
+	if ((cpf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(req.cpf, 32, SEEK_SET))
+	if (fseeko(cpf, 32, SEEK_SET))
 		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)32);
-	if ((req.dpf = fopen(argv[3], "r")) == NULL)
+	if ((dpf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(req.dpf, 32 + bzctrllen, SEEK_SET))
+	if (fseeko(dpf, 32 + bzctrllen, SEEK_SET))
 		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)(32 + bzctrllen));
-	if ((req.epf = fopen(argv[3], "r")) == NULL)
+	if ((epf = fopen(argv[3], "r")) == NULL)
 		err(1, "fopen(%s)", argv[3]);
-	if (fseeko(req.epf, 32 + bzctrllen + bzdatalen, SEEK_SET))
+	if (fseeko(epf, 32 + bzctrllen + bzdatalen, SEEK_SET))
 		err(1, "fseeko64(%s, %lld)", argv[3],
 		    (long long)(32 + bzctrllen + bzdatalen));
 
@@ -276,8 +252,30 @@ int main(int argc,char * argv[])
 	req.old = old;
 	if((req.new=malloc(req.newsize+1))==NULL) err(1,NULL);
 
+	cbz2.pf = cpf;
+	req.control.opaque = &cbz2;
+	req.control.read = readcompress;
+	dbz2.pf = dpf;
+	req.diff.opaque = &dbz2;
+	req.diff.read = readcompress;
+	ebz2.pf = epf;
+	req.extra.opaque = &ebz2;
+	req.extra.read = readcompress;
+
+	if (BZ_OK != (cbz2err = BZ2_bzDecompressInit(&cbz2.bz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", cbz2err);
+	if (BZ_OK != (dbz2err = BZ2_bzDecompressInit(&dbz2.bz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", dbz2err);
+	if (BZ_OK != (ebz2err = BZ2_bzDecompressInit(&ebz2.bz2, 0, 0)))
+		errx(1, "BZ2_bzDecompressInit, bz2err = %d", ebz2err);
+
 	if (bspatch(req))
 		err(1, "bspatch");
+
+	/* Clean up the bzip2 reads */
+	BZ2_bzDecompressEnd(&cbz2.bz2);
+	BZ2_bzDecompressEnd(&dbz2.bz2);
+	BZ2_bzDecompressEnd(&ebz2.bz2);
 
 	/* Write the new file */
 	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,0666))<0) ||
