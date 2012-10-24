@@ -42,6 +42,15 @@ dirty you can copy paste the header portion at the top of the file into your own
 I've exposed relevant functions via the `_stream` classes. The only external
 dependency not exposed is `memcmp` in `bsdiff`.
 
+This library generates patches that are not compatible with the original bsdiff
+tool. The impompatibilities were motivated by the patching needs for the game
+AirMech <https://www.carbongames.com> and the following requirements:
+
+* Eliminate/minimize any seek operations when applying patches
+* Eliminate any required disk I/O and support embedded streams
+* Ability to easily embed the routines as a library instead of an external binary
+* Compile+run on all platforms we use to build the game (Windows, Linux, NaCl, OSX)
+
 Compiling
 ---------
 The libraries should compile warning free in any moderately recent version of
