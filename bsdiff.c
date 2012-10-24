@@ -430,7 +430,7 @@ int main(int argc,char *argv[])
 
 	/* Write header (signature+newsize)*/
 	offtout(newsize, buf);
-	if (fwrite("BSDIFF40", 8, 1, pf) != 1 ||
+	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 ||
 		fwrite(buf, sizeof(buf), 1, pf) != 1)
 		err(1, "Failed to write header");
 

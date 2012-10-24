@@ -134,7 +134,7 @@ int main(int argc,char * argv[])
 	FILE * f;
 	int fd;
 	int bz2err;
-	uint8_t header[16];
+	uint8_t header[24];
 	uint8_t *old, *new;
 	int64_t oldsize, newsize;
 	BZFILE* bz2;
@@ -154,11 +154,11 @@ int main(int argc,char * argv[])
 	}
 
 	/* Check for appropriate magic */
-	if (memcmp(header, "BSDIFF40", 8) != 0)
+	if (memcmp(header, "ENDSLEY/BSDIFF43", 16) != 0)
 		errx(1, "Corrupt patch\n");
 
 	/* Read lengths from header */
-	newsize=offtin(header+8);
+	newsize=offtin(header+16)
 	if(newsize<0)
 		errx(1,"Corrupt patch\n");
 
