@@ -158,7 +158,7 @@ int main(int argc,char * argv[])
 		errx(1, "Corrupt patch\n");
 
 	/* Read lengths from header */
-	newsize=offtin(header+16)
+	newsize=offtin(header+16);
 	if(newsize<0)
 		errx(1,"Corrupt patch\n");
 
