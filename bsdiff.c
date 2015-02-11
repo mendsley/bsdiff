@@ -27,6 +27,9 @@
 
 #include "bsdiff.h"
 
+#include <limits.h>
+#include <string.h>
+
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 
 static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
