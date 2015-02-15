@@ -147,7 +147,7 @@ int main(int argc,char * argv[])
 		err(1, "fopen(%s)", argv[3]);
 
 	/* Read header */
-	if (fread(header, 1, 16, f) != 16) {
+	if (fread(header, 1, 24, f) != 24) {
 		if (feof(f))
 			errx(1, "Corrupt patch\n");
 		err(1, "fread(%s)", argv[3]);
