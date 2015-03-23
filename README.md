@@ -4,8 +4,7 @@ bsdiff and bspatch are libraries for building and applying patches to binary
 files.
 
 The original algorithm and implementation was developed by Colin Percival.  The
-algorithm is detailed in his doctoral thesis:
-<http://www.daemonology.net/papers/thesis.pdf>.  For more information visit his
+algorithm is detailed in his (unpublished) paper, [Naïve Differences of Executable Code](http://www.daemonology.net/papers/bsdiff.pdf).  For more information, visit his
 website at <http://www.daemonology.net/bsdiff/>.
 
 I maintain this project seperately from Colin's work, with the goal of making
