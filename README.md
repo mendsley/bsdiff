@@ -33,11 +33,6 @@ The overarching goal was to modify the original bsdiff/bspatch code from Colin
 and eliminate external dependencies and provide a simple interface to the core
 functionality.
 
-You can define `BSDIFF_HEADER_ONLY` or `BSPATCH_HEADER_ONLY` to only include
-the header parts of the file. If including a `.c` file makes you feel really
-dirty you can copy paste the header portion at the top of the file into your own
-`.h` file.
-
 I've exposed relevant functions via the `_stream` classes. The only external
 dependency not exposed is `memcmp` in `bsdiff`.
 
