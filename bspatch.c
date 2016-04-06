@@ -102,6 +102,8 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 #include <stdio.h>
 #include <string.h>
 #include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -129,6 +131,7 @@ int main(int argc,char * argv[])
 	int64_t oldsize, newsize;
 	BZFILE* bz2;
 	struct bspatch_stream stream;
+	struct stat sb;
 
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
@@ -158,6 +161,7 @@ int main(int argc,char * argv[])
 		((old=malloc(oldsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
 		(read(fd,old,oldsize)!=oldsize) ||
+		(fstat(fd, &sb)) ||
 		(close(fd)==-1)) err(1,"%s",argv[1]);
 	if((new=malloc(newsize+1))==NULL) err(1,NULL);
 
@@ -174,7 +178,7 @@ int main(int argc,char * argv[])
 	fclose(f);
 
 	/* Write the new file */
-	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,0666))<0) ||
+	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,sb.st_mode))<0) ||
 		(write(fd,new,newsize)!=newsize) || (close(fd)==-1))
 		err(1,"%s",argv[2]);
 
