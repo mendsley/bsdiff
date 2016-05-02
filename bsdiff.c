@@ -4,7 +4,7 @@
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
+ * modification, are permitted providing that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
@@ -31,10 +31,13 @@
 #include <string.h>
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
+#define MEDIAN3(a,b,c) (((a)<(b)) ? \
+	((b)<(c) ? (b) : ((a)<(c) ? (c) : (a))) : \
+	((b)>(c) ? (b) : ((a)>(c) ? (c) : (a))))
 
 static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 {
-	int64_t i,j,k,x,tmp,jj,kk;
+	int64_t i,j,k,x,y,z,tmp,jj,kk;
 
 	if(len<16) {
 		for(k=start;k<start+len;k+=j) {
@@ -55,7 +58,20 @@ static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 		return;
 	};
 
-	x=V[I[start+len/2]+h];
+	/* Select pivot, algorithm by Bentley & McIlroy */
+	j=start+len/2;
+	k=start+len-1;
+	x=V[I[j]+h];
+	y=V[I[start]+h];
+	z=V[I[k]+h];
+	if(len>40) {  /* Big array: Pseudomedian of 9 */
+		tmp=len/8;
+		x=MEDIAN3(x,V[I[j-tmp]+h],V[I[j+tmp]+h]);
+		y=MEDIAN3(y,V[I[start+tmp]+h],V[I[start+tmp+tmp]+h]);
+		z=MEDIAN3(z,V[I[k-tmp]+h],V[I[k-tmp-tmp]+h]);
+	};  /* Else medium array: Pseudomedian of 3 */
+	x=MEDIAN3(x,y,z);
+
 	jj=0;kk=0;
 	for(i=start;i<start+len;i++) {
 		if(V[I[i]+h]<x) jj++;
@@ -252,7 +268,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				(req.old[scsc+lastoffset] == req.new[scsc]))
 				oldscore++;
 
-			if(((len==oldscore) && (len!=0)) || 
+			if(((len==oldscore) && (len!=0)) ||
 				(len>oldscore+8)) break;
 
 			if((scan+lastoffset<req.oldsize) &&
@@ -414,7 +430,7 @@ int main(int argc,char *argv[])
 	if ((pf = fopen(argv[3], "w")) == NULL)
 		err(1, "%s", argv[3]);
 
-	/* Write header (signature+newsize)*/
+	/* Write header (signature+newsize) */
 	offtout(newsize, buf);
 	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 ||
 		fwrite(buf, sizeof(buf), 1, pf) != 1)
