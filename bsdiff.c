@@ -4,7 +4,7 @@
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
+ * modification, are permitted providing that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
@@ -26,6 +26,7 @@
  */
 
 #include "bsdiff.h"
+#include <bzlib.h>
 
 #include <limits.h>
 #include <string.h>
@@ -252,7 +253,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				(req.old[scsc+lastoffset] == req.new[scsc]))
 				oldscore++;
 
-			if(((len==oldscore) && (len!=0)) || 
+			if(((len==oldscore) && (len!=0)) ||
 				(len>oldscore+8)) break;
 
 			if((scan+lastoffset<req.oldsize) &&
@@ -349,18 +350,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 	return result;
 }
 
-#if defined(BSDIFF_EXECUTABLE)
-
-#include <sys/types.h>
-
-#include <bzlib.h>
-#include <err.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
+int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 {
 	int bz2err;
 	BZFILE* bz2;
@@ -372,6 +362,17 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 
 	return 0;
 }
+
+#if defined(BSDIFF_EXECUTABLE)
+
+#include <sys/types.h>
+
+#include <err.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
 
 int main(int argc,char *argv[])
 {

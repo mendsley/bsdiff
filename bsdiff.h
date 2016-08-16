@@ -4,7 +4,7 @@
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
+ * modification, are permitted providing that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
@@ -40,6 +40,7 @@ struct bsdiff_stream
 	int (*write)(struct bsdiff_stream* stream, const void* buffer, int size);
 };
 
+int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size);
 int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream);
 
 #endif

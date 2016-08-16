@@ -4,7 +4,7 @@
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
+ * modification, are permitted providing that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
@@ -26,8 +26,9 @@
  */
 
 #include "bspatch.h"
+#include <bzlib.h>
 
-static int64_t offtin(uint8_t *buf)
+int64_t offtin(uint8_t *buf)
 {
 	int64_t y;
 
@@ -94,20 +95,7 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 	return 0;
 }
 
-#if defined(BSPATCH_EXECUTABLE)
-
-#include <bzlib.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <err.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
+int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
 {
 	int n;
 	int bz2err;
@@ -120,6 +108,19 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
 
 	return 0;
 }
+
+
+#if defined(BSPATCH_EXECUTABLE)
+
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 int main(int argc,char * argv[])
 {

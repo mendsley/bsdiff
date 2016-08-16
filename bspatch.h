@@ -4,7 +4,7 @@
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted providing that the following conditions 
+ * modification, are permitted providing that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
@@ -35,6 +35,9 @@ struct bspatch_stream
 	void* opaque;
 	int (*read)(const struct bspatch_stream* stream, void* buffer, int length);
 };
+
+int64_t offtin(uint8_t *buf);
+int bz2_read(const struct bspatch_stream* stream, void* buffer, int length);
 
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream);
 
