@@ -27,6 +27,7 @@
 
 #include "bspatch.h"
 
+#if !defined(BSPATCH_USE_VLE)
 static int64_t offtin(uint8_t *buf)
 {
 	int64_t y;
@@ -44,7 +45,19 @@ static int64_t offtin(uint8_t *buf)
 
 	return y;
 }
+#else
+static int64_t offtin( const uint8_t *buf ) 
+{
+    /* taken from https://github.com/r-lyeh/vle */
+    uint64_t out = 0, j = -7;
+    do {
+        out |= (( ((uint64_t)(*buf)) & 0x7f) << (j += 7) );
+    } while( ((uint64_t)(*buf++)) & 0x80 );
+    return (int64_t)( out & (1) ? ~(out >> 1) : (out >> 1) );
+}
+#endif
 
+#if !defined(BSPATCH_USE_VLE)
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream)
 {
 	uint8_t buf[8];
@@ -93,6 +106,63 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 
 	return 0;
 }
+#else
+int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream)
+{
+	uint8_t buf[10], *ptr;
+	int64_t oldpos,newpos;
+	int64_t ctrl[3];
+	int64_t i;
+
+	oldpos=0;newpos=0;
+	while(newpos<newsize) {
+		/* Read control data */
+		for(i=0;i<=2;i++) {
+			ptr = &buf[0];
+			for(;;) {
+				if( stream->read(stream, ptr, 1) ) {
+					return -1;
+				}
+				if( ((*ptr++) & 0x80) == 0x00 ) {
+					break;
+				}
+			}
+			ctrl[i]=offtin(buf);
+		};
+
+		/* Sanity-check */
+		if(newpos+ctrl[0]>newsize)
+			return -1;
+
+		/* Read diff string */
+		if (stream->read(stream, new + newpos, ctrl[0]))
+			return -1;
+
+		/* Add old data to diff string */
+		for(i=0;i<ctrl[0];i++)
+			if((oldpos+i>=0) && (oldpos+i<oldsize))
+				new[newpos+i]+=old[oldpos+i];
+
+		/* Adjust pointers */
+		newpos+=ctrl[0];
+		oldpos+=ctrl[0];
+
+		/* Sanity-check */
+		if(newpos+ctrl[1]>newsize)
+			return -1;
+
+		/* Read extra string */
+		if (stream->read(stream, new + newpos, ctrl[1]))
+			return -1;
+
+		/* Adjust pointers */
+		newpos+=ctrl[1];
+		oldpos+=ctrl[2];
+	};
+
+	return 0;
+}
+#endif
 
 #if defined(BSPATCH_EXECUTABLE)
 

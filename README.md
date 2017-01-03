@@ -58,6 +58,10 @@ If your compiler does not provide an implementation of `<stdint.h>` you can
 remove the header from the bsdiff/bspatch files and provide your own typedefs
 for the following symbols: `uint8_t`, `uint64_t` and `int64_t`.
 
+Define `BSDIFF_USE_SAIS` to enable SAIS diff algorithm.
+Define `BSDIFF_USE_VLE`/`BSPATCH_USE_VLE` to enable variable run-length
+stream encoding.
+
 Examples
 --------
 Each project has an optional main function that serves as an example for using
