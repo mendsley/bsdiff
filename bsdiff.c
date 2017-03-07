@@ -105,7 +105,6 @@ static void qsufsort(int64_t *I,int64_t *V,const uint8_t *old,int64_t oldsize)
 	buckets[0]=0;
 
 	for(i=0;i<oldsize;i++) I[++buckets[old[i]]]=i;
-	I[0]=oldsize;
 	for(i=0;i<oldsize;i++) V[i]=buckets[old[i]];
 	V[oldsize]=0;
 	for(i=1;i<256;i++) if(buckets[i]==buckets[i-1]+1) I[buckets[i]]=-1;
