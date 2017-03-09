@@ -29,6 +29,7 @@
 
 #include <limits.h>
 #include <string.h>
+#include <stdio.h>
 
 #define MIN(x, y) (((x)<(y)) ? (x) : (y))
 
@@ -141,22 +142,42 @@ static void qsufsort(int64_t *I, int64_t *V, const uint8_t *old, int64_t oldsize
     for (i = 0; i < oldsize + 1; i++) I[V[i]] = i;
 }
 
-static int64_t matchlen(const uint8_t *old, int64_t oldsize, const uint8_t *new, int64_t newsize) {
+/*
+ * Given two pointers, old and new, limited by old_size and new_size accordingly,
+ * return me the amount of bytes that matched from the beginning of the pointers
+ * (not to exceed either old_size or new_size).
+ */
+static int64_t matchlen(const uint8_t *old, int64_t old_size, const uint8_t *new, int64_t new_size) {
     int64_t i;
 
-    for (i = 0; (i < oldsize) && (i < newsize); i++)
+    for (i = 0; (i < old_size) && (i < new_size); i++)
         if (old[i] != new[i]) break;
 
     return i;
 }
 
-static int64_t search(const int64_t *I, const uint8_t *old, int64_t oldsize,
-        const uint8_t *new, int64_t newsize, int64_t st, int64_t en, int64_t *pos) {
+/**
+ * @param I index (suffix array of old)
+ * @param old original binary (never changes!)
+ * @param old_size original binary size
+ * @param new search from this location in new binary
+ * @param new_size how many bytes available in new
+ * @param st starting index(?)
+ * @param en ending index(?)
+ * @param pos where to write position in old where the longer
+ * match was found.
+ * @return matched length.
+ */
+static int64_t search(const int64_t *I, const uint8_t *old, int64_t old_size,
+        const uint8_t *new, int64_t new_size, int64_t st, int64_t en, int64_t *pos) {
     int64_t x, y;
 
+    // If distance between 2 indexes less than 2
+    // $TODO is there a guarantee that st != en?
     if (en - st < 2) {
-        x = matchlen(old + I[st], oldsize - I[st], new, newsize);
-        y = matchlen(old + I[en], oldsize - I[en], new, newsize);
+        // try to match suffix #st (x) and suffix #en (y) at 'new'
+        x = matchlen(old + I[st], old_size - I[st], new, new_size);
+        y = matchlen(old + I[en], old_size - I[en], new, new_size);
 
         if (x > y) {
             *pos = I[st];
@@ -167,11 +188,17 @@ static int64_t search(const int64_t *I, const uint8_t *old, int64_t oldsize,
         }
     };
 
+    // x is the middle between start and end
     x = st + (en - st) / 2;
-    if (memcmp(old + I[x], new, MIN(oldsize - I[x], newsize)) < 0) {
-        return search(I, old, oldsize, new, newsize, x, en, pos);
+    // If bytewise, the string at index (x) is "left" of string at "new"...
+    if (memcmp(old + I[x], new, MIN(old_size - I[x], new_size)) < 0) {
+        // let's look for a match between "x" and "en"
+        // that's because it's not gonna ever be left of x, since I
+        // is ordered
+        return search(I, old, old_size, new, new_size, x, en, pos);
     } else {
-        return search(I, old, oldsize, new, newsize, st, x, pos);
+        // otherwise, let's look between st and x (can't be right of x)
+        return search(I, old, old_size, new, new_size, st, x, pos);
     };
 }
 
@@ -239,7 +266,7 @@ static int bsdiff_internal(const struct bsdiff_request req) {
     int64_t scan, pos, len;
     int64_t lastscan, lastpos, lastoffset;
     int64_t oldscore, scsc;
-    int64_t s, Sf, lenf, Sb, lenb;
+    int64_t s, lenf, lenb, fill_rate;
     int64_t overlap, Ss, lens;
     int64_t i;
     uint8_t *buffer;
@@ -266,75 +293,155 @@ static int bsdiff_internal(const struct bsdiff_request req) {
     while (scan < req.newsize) {
         oldscore = 0;
 
+        printf("About to start scan@%'lld, last_scan=%'lld, last_pos=%'lld, last_offset=%'lld\n",
+                scan, lastscan, lastpos, lastoffset);
+
         for (scsc = scan += len; scan < req.newsize; scan++) {
             len = search(I, req.old, req.oldsize, req.new + scan, req.newsize - scan,
                     0, req.oldsize, &pos);
 
+            printf("New@%'lld matched old@%'lld for %'lld bytes. Will calc old score from %'lld\n", scan, pos, len, (lastoffset+scsc));
+
+            // len now has the length of a matched string of 'req.new+scan' anywhere in old.
+            // pos points
+
             for (; scsc < scan + len; scsc++)
+
+                // let's drag scsc from the start of the scan, in amount of matched length.
+
                 if ((scsc + lastoffset < req.oldsize) &&
                         (req.old[scsc + lastoffset] == req.new[scsc]))
                     oldscore++;
 
+            printf("Old score %'lld\n", oldscore);
+
             if (((len == oldscore) && (len != 0)) ||
-                    (len > oldscore + 8))
+                    (len > oldscore + 8)) {
+                printf("stopping scan\n");
                 break;
+            }
 
             if ((scan + lastoffset < req.oldsize) &&
-                    (req.old[scan + lastoffset] == req.new[scan]))
+                    (req.old[scan + lastoffset] == req.new[scan])) {
+                printf("Old score %'lld, decreasing\n", oldscore);
                 oldscore--;
+            }
         };
 
         if ((len != oldscore) || (scan == req.newsize)) {
+
+            printf("Writing buffer, len %'lld oldscore %'lld, scan %'lld, new size %'lld\n",
+                    len, oldscore, scan, req.newsize);
+
+            // we want to establish 2 values: lenf and lenb
+            // lenf is how many bytes are we gonna 'diff'
+            // lenb is how many bytes we gonna not serve at all right now
+            // (and instead deal with them in the next scan)
+
+            // we are effectively dealing with the block of New[lastscan to scan]
+            // and Old[lastpos to pos] The beginning of New block is aligned with the beginning of the Old
+            // block, and their ends are also aligned, which creates "compression" or "tear" in the "middle".
+
+            // lenf is calculated as: the index between lastscan and scan (not to exceed oldsize, counting from lastpos),
+            // where the difference between the doubled amount of matches from Old[lastpost] and New[lastscan] to (i)
+            // is maximized.
             s = 0;
-            Sf = 0;
+            fill_rate = 0;
             lenf = 0;
             for (i = 0; (lastscan + i < scan) && (lastpos + i < req.oldsize);) {
+                // s is the amount of matched characters.
                 if (req.old[lastpos + i] == req.new[lastscan + i]) s++;
                 i++;
-                if (s * 2 - i > Sf * 2 - lenf) {
-                    Sf = s;
+                if (s * 2 - i > fill_rate) {
+                    // if the amount of matched characters minus
+                    fill_rate = s * 2 - i;
                     lenf = i;
                 };
             };
 
+            // lenb is in essence reverse of lenf. We start an index from the end of the current block.
+            // We then find the value where the amount of matched bytes from the end of the block, doubled,
+            // minus total amount of bytes considered, is maximum.
+
             lenb = 0;
             if (scan < req.newsize) {
                 s = 0;
-                Sb = 0;
+                fill_rate = 0;
                 for (i = 1; (scan >= lastscan + i) && (pos >= i); i++) {
                     if (req.old[pos - i] == req.new[scan - i]) s++;
-                    if (s * 2 - i > Sb * 2 - lenb) {
-                        Sb = s;
+                    if (s * 2 - i > fill_rate) {
+                        fill_rate = s * 2 - i;
                         lenb = i;
                     };
                 };
             };
 
+            // now of course it is possible there is an overlap, considering how we
+            // arrived to both lenf and lenb
             if (lastscan + lenf > scan - lenb) {
                 overlap = (lastscan + lenf) - (scan - lenb);
+
                 s = 0;
                 Ss = 0;
                 lens = 0;
                 for (i = 0; i < overlap; i++) {
+
+                    // we are comparing the overlapped block simultaneously
+                    // to the old binary as if overlap was relative with the beginning
+                    // of the old block, and as if it was relative to the end of the old block.
+                    //
+                    // Think of it that way:
+                    // new block |-----------------|
+                    // new block |-----[ ovl ]-----|
+                    // old block |---------------|
+                    // can be viewed as:
+                    // |-----[ ovl ]---| (relative to the beginning of the block)
+                    // |---[ ovl ]-----| (relative to the end of the block)
+                    // we are trying to establish "lens",
+                    // which tells us how to divide up the overlaid part
+
+                    // if the byte matches with an overlap if taken from the beginning of the old
+                    // block, increase s.
                     if (req.new[lastscan + lenf - overlap + i] ==
                             req.old[lastpos + lenf - overlap + i])
                         s++;
+
+                    // but if the byte matches with the overlap if taken from the end of the old block,
+                    // decrease s.
                     if (req.new[scan - lenb + i] ==
                             req.old[pos - lenb + i])
                         s--;
+
+
                     if (s > Ss) {
+                        // remember the index inside the overlap where s value was maximum.
                         Ss = s;
                         lens = i + 1;
                     };
                 };
 
+
+                // lens is a stake inside the overlap region, we divide along the stake,
+                // everything on the left goes to lenf, and on the right to lenb.
+
                 lenf += lens - overlap;
                 lenb -= lens;
             };
 
+            // now, all of space between oldscan and scan is divided into potentially 3 regions:
+            // 1. oldscan to oldscan + lenf : all of that region is to be considered a "diff"
+            //    region right now.
+            // 2. oldscan + lenf to scan - lenb : area that is considered "new", and is quoted verbatim
+            // 3. scan - lenb to scan : area that we are postponing for now.
+
+            // read diff stream of that length
             offtout(lenf, buf);
+            // write out that many bytes of new file
             offtout((scan - lenb) - (lastscan + lenf), buf + 8);
+            // replacing that many bytes of the old file
             offtout((pos - lenb) - (lastpos + lenf), buf + 16);
+
+            printf("Buffer output has %'lld diff, %'lld backup\n", lenf, lenb);
 
             /* Write control data */
             if (writedata(req.stream, buf, sizeof(buf)))
@@ -355,7 +462,7 @@ static int bsdiff_internal(const struct bsdiff_request req) {
             lastscan = scan - lenb;
             lastpos = pos - lenb;
             lastoffset = pos - scan;
-        };
+        }
     };
 
     return 0;
