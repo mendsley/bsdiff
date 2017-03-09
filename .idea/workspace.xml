@@ -13,7 +13,6 @@
   <component name="ChangeListManager">
     <list default="true" id="aaa49084-9d63-41c3-94f5-3a0d0cb9a99b" name="Default" comment="">
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/CMakeLists.txt" afterPath="$PROJECT_DIR$/CMakeLists.txt" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/bsdiff.c" afterPath="$PROJECT_DIR$/bsdiff.c" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
@@ -35,12 +34,23 @@
             <file leaf-file-name="bsdiff.c" pinned="false" current-in-tab="true">
               <entry file="file://$PROJECT_DIR$/bsdiff.c">
                 <provider selected="true" editor-type-id="text-editor">
-                  <state relative-caret-position="511">
-                    <caret line="440" column="56" lean-forward="false" selection-start-line="440" selection-start-column="56" selection-end-line="440" selection-end-column="56" />
+                  <state relative-caret-position="306">
+                    <caret line="309" column="0" lean-forward="true" selection-start-line="309" selection-start-column="0" selection-end-line="309" selection-end-column="0" />
                     <folding>
                       <element signature="e#1360#1379#0" expanded="true" />
-                      <element signature="e#16616#19030#0" expanded="true" />
+                      <element signature="e#10192#10327#0" expanded="true" />
+                      <element signature="e#17050#19464#0" expanded="true" />
                     </folding>
+                  </state>
+                </provider>
+              </entry>
+            </file>
+            <file leaf-file-name="stdio.h" pinned="false" current-in-tab="false">
+              <entry file="file:///usr/include/stdio.h">
+                <provider selected="true" editor-type-id="text-editor">
+                  <state relative-caret-position="315">
+                    <caret line="363" column="11" lean-forward="false" selection-start-line="363" selection-start-column="11" selection-end-line="363" selection-end-column="11" />
+                    <folding />
                   </state>
                 </provider>
               </entry>
@@ -60,6 +70,8 @@
                     <caret line="199" column="71" lean-forward="false" selection-start-line="199" selection-start-column="71" selection-end-line="199" selection-end-column="71" />
                     <folding>
                       <element signature="e#1360#1379#0" expanded="true" />
+                      <element signature="e#10192#10327#0" expanded="true" />
+                      <element signature="e#17050#19464#0" expanded="true" />
                     </folding>
                   </state>
                 </provider>
@@ -89,12 +101,16 @@
     <findStrings>
       <find>len</find>
       <find>scan</find>
-      <find>search</find>
       <find>pos</find>
       <find>err</find>
       <find>printf</find>
       <find>Sf</find>
       <find>Sb</find>
+      <find>lastoffset</find>
+      <find>lastpost</find>
+      <find>lastpos</find>
+      <find>Buffer output</find>
+      <find>search</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -413,12 +429,20 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1488932062518</updated>
-      <workItem from="1488932063789" duration="26162000" />
+      <workItem from="1488932063789" duration="35736000" />
     </task>
+    <task id="LOCAL-00001" summary="check point">
+      <created>1489040063411</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1489040063411</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="26162000" />
+    <option name="totallyTimeSpent" value="35736000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="2729" y="91" width="1723" height="1266" extended-state="1" />
@@ -449,6 +473,10 @@
   <component name="VcsContentAnnotationSettings">
     <option name="myLimit" value="2678400000" />
   </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="check point" />
+    <option name="LAST_COMMIT_MESSAGE" value="check point" />
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <option name="time" value="1" />
@@ -476,13 +504,22 @@
         </state>
       </provider>
     </entry>
+    <entry file="file:///usr/include/stdio.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="315">
+          <caret line="363" column="11" lean-forward="false" selection-start-line="363" selection-start-column="11" selection-end-line="363" selection-end-column="11" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/bsdiff.c">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="511">
-          <caret line="440" column="56" lean-forward="false" selection-start-line="440" selection-start-column="56" selection-end-line="440" selection-end-column="56" />
+        <state relative-caret-position="306">
+          <caret line="309" column="0" lean-forward="true" selection-start-line="309" selection-start-column="0" selection-end-line="309" selection-end-column="0" />
           <folding>
             <element signature="e#1360#1379#0" expanded="true" />
-            <element signature="e#16616#19030#0" expanded="true" />
+            <element signature="e#10192#10327#0" expanded="true" />
+            <element signature="e#17050#19464#0" expanded="true" />
           </folding>
         </state>
       </provider>

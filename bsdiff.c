@@ -300,10 +300,11 @@ static int bsdiff_internal(const struct bsdiff_request req) {
             len = search(I, req.old, req.oldsize, req.new + scan, req.newsize - scan,
                     0, req.oldsize, &pos);
 
-            printf("New@%'lld matched old@%'lld for %'lld bytes. Will calc old score from %'lld\n", scan, pos, len, (lastoffset+scsc));
-
             // len now has the length of a matched string of 'req.new+scan' anywhere in old.
-            // pos points
+            // pos points to where that match was found.
+
+            printf("New@%'lld matched old@%'lld for %'lld bytes. Will calc old score from %'lld\n",
+                    scan, pos, len, (lastoffset+scsc));
 
             for (; scsc < scan + len; scsc++)
 
@@ -317,7 +318,7 @@ static int bsdiff_internal(const struct bsdiff_request req) {
 
             if (((len == oldscore) && (len != 0)) ||
                     (len > oldscore + 8)) {
-                printf("stopping scan\n");
+                printf("stopping scan because %s\n", (len > oldscore + 8)?"Length is superior":"100% match");
                 break;
             }
 
@@ -328,10 +329,14 @@ static int bsdiff_internal(const struct bsdiff_request req) {
             }
         };
 
+        printf("Scan completed, len=%'lld, score %'lld, %'lld bytes left in new\n", len, oldscore, req.newsize-scan);
+
         if ((len != oldscore) || (scan == req.newsize)) {
 
+#if 0
             printf("Writing buffer, len %'lld oldscore %'lld, scan %'lld, new size %'lld\n",
                     len, oldscore, scan, req.newsize);
+#endif
 
             // we want to establish 2 values: lenf and lenb
             // lenf is how many bytes are we gonna 'diff'
@@ -343,7 +348,7 @@ static int bsdiff_internal(const struct bsdiff_request req) {
             // block, and their ends are also aligned, which creates "compression" or "tear" in the "middle".
 
             // lenf is calculated as: the index between lastscan and scan (not to exceed oldsize, counting from lastpos),
-            // where the difference between the doubled amount of matches from Old[lastpost] and New[lastscan] to (i)
+            // where the difference between the doubled amount of matches from Old[lastpos] and New[lastscan] to (i)
             // is maximized.
             s = 0;
             fill_rate = 0;
@@ -441,17 +446,20 @@ static int bsdiff_internal(const struct bsdiff_request req) {
             // replacing that many bytes of the old file
             offtout((pos - lenb) - (lastpos + lenf), buf + 16);
 
-            printf("Buffer output has %'lld diff, %'lld backup\n", lenf, lenb);
-
             /* Write control data */
             if (writedata(req.stream, buf, sizeof(buf)))
                 return -1;
 
+            int64_t zrs = 0;
+
             /* Write diff data */
             for (i = 0; i < lenf; i++)
-                buffer[i] = req.new[lastscan + i] - req.old[lastpos + i];
+                if (!(buffer[i] = req.new[lastscan + i] - req.old[lastpos + i])) zrs++;
             if (writedata(req.stream, buffer, lenf))
                 return -1;
+
+            printf("Buffer output has %'lld diff, %'lld as-is, %'lld backup, old index %'lld, zero count %'lld\n",
+                    lenf, (scan - lenb) - (lastscan + lenf), lenb, (pos - lenb) - (lastpos + lenf), zrs);
 
             /* Write extra data */
             for (i = 0; i < (scan - lenb) - (lastscan + lenf); i++)
