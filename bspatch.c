@@ -106,7 +106,7 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-
+#include "bscommon.h"
 static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
 {
 	int n;
@@ -126,7 +126,7 @@ int main(int argc,char * argv[])
 	FILE * f;
 	int fd;
 	int bz2err;
-	uint8_t header[24];
+	BSHeader header;
 	uint8_t *old, *new;
 	int64_t oldsize, newsize;
 	BZFILE* bz2;
@@ -140,18 +140,18 @@ int main(int argc,char * argv[])
 		err(1, "fopen(%s)", argv[3]);
 
 	/* Read header */
-	if (fread(header, 1, 24, f) != 24) {
+	if (fread(&header, sizeof(header), 1 , f) != 1) {
 		if (feof(f))
 			errx(1, "Corrupt patch\n");
 		err(1, "fread(%s)", argv[3]);
 	}
 
 	/* Check for appropriate magic */
-	if (memcmp(header, "ENDSLEY/BSDIFF43", 16) != 0)
+	if (memcmp(header.header_txt, HEADER_TXT, sizeof(HEADER_TXT)) != 0)
 		errx(1, "Corrupt patch\n");
 
 	/* Read lengths from header */
-	newsize=offtin(header+16);
+	newsize=offtin(header.new_size);
 	if(newsize<0)
 		errx(1,"Corrupt patch\n");
 

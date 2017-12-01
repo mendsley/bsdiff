@@ -26,7 +26,7 @@
  */
 
 #include "bsdiff.h"
-
+#include "bscommon.h"
 #include <limits.h>
 #include <string.h>
 
@@ -379,7 +379,7 @@ int main(int argc,char *argv[])
 	int bz2err;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
-	uint8_t buf[8];
+	BSHeader header;
 	FILE * pf;
 	struct bsdiff_stream stream;
 	BZFILE* bz2;
@@ -415,11 +415,10 @@ int main(int argc,char *argv[])
 		err(1, "%s", argv[3]);
 
 	/* Write header (signature+newsize)*/
-	offtout(newsize, buf);
-	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 ||
-		fwrite(buf, sizeof(buf), 1, pf) != 1)
+	strncpy(header.header_txt,HEADER_TXT, sizeof(header.header_txt));
+	offtout(newsize, header.new_size);
+	if(	fwrite(&header,sizeof(header),1,pf) != 1)
 		err(1, "Failed to write header");
-
 
 	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
 		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
