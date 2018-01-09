@@ -154,6 +154,9 @@ int main(int argc,char * argv[])
 	newsize=offtin(header.new_size);
 	if(newsize<0)
 		errx(1,"Corrupt patch\n");
+	int oldsize_in = offtin(header.old_size);
+	if(oldsize_in != oldsize)
+		errx(1,"Corrupt patch Header oldsize %d != file %lld\n",oldsize_in, oldsize);
 
 	/* Close patch file and re-open it via libbzip2 at the right places */
 	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
