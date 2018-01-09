@@ -121,8 +121,22 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
 	return 0;
 }
 
+static int raw_read(const struct bspatch_stream* stream, void* buffer, int length)
+{
+	int n;
+	int bz2err;
+	BZFILE* bz2;
+	size_t bytes_read = fread ( buffer, 1, length, (FILE *) stream->opaque );
+
+	if (bytes_read != length)
+		return -1;
+
+	return 0;
+}
+
 int main(int argc,char * argv[])
 {
+	int use_bz2 = 0;
 	FILE * f;
 	int fd;
 	int bz2err;
@@ -168,16 +182,28 @@ int main(int argc,char * argv[])
 		(close(fd)==-1)) err(1,"%s",argv[1]);
 	if((new=malloc(newsize+1))==NULL) err(1,NULL);
 
-	if (NULL == (bz2 = BZ2_bzReadOpen(&bz2err, f, 0, 0, NULL, 0)))
-		errx(1, "BZ2_bzReadOpen, bz2err=%d", bz2err);
+	if(use_bz2)
+	{
+		if (NULL == (bz2 = BZ2_bzReadOpen(&bz2err, f, 0, 0, NULL, 0)))
+			errx(1, "BZ2_bzReadOpen, bz2err=%d", bz2err);
+		stream.read = bz2_read;
+		stream.opaque = bz2;
+			
+	}
+	else{
+		stream.read = raw_read;
+		stream.opaque = f;
 
-	stream.read = bz2_read;
-	stream.opaque = bz2;
+	}
+
 	if (bspatch(old, oldsize, new, newsize, &stream))
 		errx(1, "bspatch");
 
-	/* Clean up the bzip2 reads */
-	BZ2_bzReadClose(&bz2err, bz2);
+	if(use_bz2)
+	{
+		/* Clean up the bzip2 reads */
+		BZ2_bzReadClose(&bz2err, bz2);
+	}
 	fclose(f);
 
 	/* Write the new file */
