@@ -4,11 +4,11 @@ bsdiff and bspatch are libraries for building and applying patches to binary
 files.
 
 The original algorithm and implementation was developed by Colin Percival.  The
-algorithm is detailed in his (unpublished) paper, [Naïve Differences of Executable Code](http://www.daemonology.net/papers/bsdiff.pdf).  For more information, visit his
+algorithm is detailed in his paper, [Naïve Differences of Executable Code](http://www.daemonology.net/papers/bsdiff.pdf).  For more information, visit his
 website at <http://www.daemonology.net/bsdiff/>.
 
-I maintain this project seperately from Colin's work, with the goal of making
-the core functionality easily embedable in existing projects.
+I maintain this project separately from Colin's work, with the goal of making
+the core functionality easily embeddable in existing projects.
 
 Contact
 -------
@@ -37,7 +37,7 @@ I've exposed relevant functions via the `_stream` classes. The only external
 dependency not exposed is `memcmp` in `bsdiff`.
 
 This library generates patches that are not compatible with the original bsdiff
-tool. The impompatibilities were motivated by the patching needs for the game
+tool. The incompatibilities were motivated by the patching needs for the game
 AirMech <https://www.carbongames.com> and the following requirements:
 
 * Eliminate/minimize any seek operations when applying patches
@@ -82,7 +82,7 @@ Reference
 		
 
 In order to use `bsdiff`, you need to define functions for allocating memory and
-writing binary data. This behavior is controlled by the `stream` parameted
+writing binary data. This behavior is controlled by the `stream` parameter
 passed to to `bsdiff(...)`.
 
 The `opaque` field is never read or modified from within the `bsdiff` function.
