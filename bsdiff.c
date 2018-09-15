@@ -185,14 +185,14 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length)
+static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length, int type)
 {
 	int64_t result = 0;
 
 	while (length > 0)
 	{
 		const int smallsize = (int)MIN(length, INT_MAX);
-		const int writeresult = stream->write(stream, buffer, smallsize);
+		const int writeresult = stream->write(stream, buffer, smallsize, type);
 		if (writeresult == -1)
 		{
 			return -1;
@@ -297,19 +297,19 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
 			/* Write control data */
-			if (writedata(req.stream, buf, sizeof(buf)))
+			if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
 				return -1;
 
 			/* Write diff data */
 			for(i=0;i<lenf;i++)
 				buffer[i]=req.new[lastscan+i]-req.old[lastpos+i];
-			if (writedata(req.stream, buffer, lenf))
+			if (writedata(req.stream, buffer, lenf, BSDIFF_WRITEDIFF))
 				return -1;
 
 			/* Write extra data */
 			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
 				buffer[i]=req.new[lastscan+lenf+i];
-			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf)))
+			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf), BSDIFF_WRITEEXTRA))
 				return -1;
 
 			lastscan=scan-lenb;
@@ -360,7 +360,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 #include <stdlib.h>
 #include <unistd.h>
 
-static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
+static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size, int type __attribute__((__unused__)))
 {
 	int bz2err;
 	BZFILE* bz2;
