@@ -321,24 +321,24 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	return 0;
 }
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream)
+int bsdiff(const uint8_t* source, int64_t sourcesize, const uint8_t* target, int64_t targetsize, struct bsdiff_stream* stream)
 {
 	int result;
 	struct bsdiff_request req;
 
-	if((req.I=stream->malloc((oldsize+1)*sizeof(int64_t)))==NULL)
+	if((req.I=stream->malloc((sourcesize+1)*sizeof(int64_t)))==NULL)
 		return -1;
 
-	if((req.buffer=stream->malloc(newsize+1))==NULL)
+	if((req.buffer=stream->malloc(targetsize+1))==NULL)
 	{
 		stream->free(req.I);
 		return -1;
 	}
 
-	req.old = old;
-	req.oldsize = oldsize;
-	req.new = new;
-	req.newsize = newsize;
+	req.old = source;
+	req.oldsize = sourcesize;
+	req.new = target;
+	req.newsize = targetsize;
 	req.stream = stream;
 
 	result = bsdiff_internal(req);
