@@ -185,14 +185,14 @@ static void offtout(int64_t x,uint8_t *buf)
 	if(x<0) buf[7]|=0x80;
 }
 
-static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length)
+static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64_t length, int type)
 {
 	int64_t result = 0;
 
 	while (length > 0)
 	{
 		const int smallsize = (int)MIN(length, INT_MAX);
-		const int writeresult = stream->write(stream, buffer, smallsize);
+		const int writeresult = stream->write(stream, buffer, smallsize, type);
 		if (writeresult == -1)
 		{
 			return -1;
@@ -222,6 +222,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	int64_t *I,*V;
 	int64_t scan,pos,len;
 	int64_t lastscan,lastpos,lastoffset;
+	int64_t ctrlcur[3],ctrlnext[3];
 	int64_t oldscore,scsc;
 	int64_t s,Sf,lenf,Sb,lenb;
 	int64_t overlap,Ss,lens;
@@ -240,6 +241,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;pos=0;
 	lastscan=0;lastpos=0;lastoffset=0;
+	ctrlcur[0]=0;ctrlcur[1]=0;ctrlcur[2]=0;
 	while(scan<req.newsize) {
 		oldscore=0;
 
@@ -292,24 +294,38 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				lenb-=lens;
 			};
 
-			offtout(lenf,buf);
-			offtout((scan-lenb)-(lastscan+lenf),buf+8);
-			offtout((pos-lenb)-(lastpos+lenf),buf+16);
+			ctrlnext[0]=lenf;
+			ctrlnext[1]=(scan-lenb)-(lastscan+lenf);
+			ctrlnext[2]=(pos-lenb)-(lastpos+lenf);
+			
+			if (ctrlnext[0]) {
+				if (ctrlcur[0]||ctrlcur[1]||ctrlcur[2]) {
+					offtout(ctrlcur[0],buf);
+					offtout(ctrlcur[1],buf+8);
+					offtout(ctrlcur[2],buf+16);
 
-			/* Write control data */
-			if (writedata(req.stream, buf, sizeof(buf)))
-				return -1;
+					/* Write control data */
+					if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
+						return -1;
+				};
+				ctrlcur[0]=ctrlnext[0];
+				ctrlcur[1]=ctrlnext[1];
+				ctrlcur[2]=ctrlnext[2];
+			} else {
+				ctrlcur[1]+=ctrlnext[1];
+				ctrlcur[2]+=ctrlnext[2];
+			};
 
 			/* Write diff data */
 			for(i=0;i<lenf;i++)
 				buffer[i]=req.new[lastscan+i]-req.old[lastpos+i];
-			if (writedata(req.stream, buffer, lenf))
+			if (writedata(req.stream, buffer, lenf, BSDIFF_WRITEDIFF))
 				return -1;
 
 			/* Write extra data */
 			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
 				buffer[i]=req.new[lastscan+lenf+i];
-			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf)))
+			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf), BSDIFF_WRITEEXTRA))
 				return -1;
 
 			lastscan=scan-lenb;
@@ -318,27 +334,37 @@ static int bsdiff_internal(const struct bsdiff_request req)
 		};
 	};
 
+	if (ctrlcur[0]||ctrlcur[1]) {
+		offtout(ctrlcur[0],buf);
+		offtout(ctrlcur[1],buf+8);
+		offtout(ctrlcur[2],buf+16);
+
+		/* Write control data */
+		if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
+			return -1;
+	};
+
 	return 0;
 }
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream)
+int bsdiff(const uint8_t* source, int64_t sourcesize, const uint8_t* target, int64_t targetsize, struct bsdiff_stream* stream)
 {
 	int result;
 	struct bsdiff_request req;
 
-	if((req.I=stream->malloc((oldsize+1)*sizeof(int64_t)))==NULL)
+	if((req.I=stream->malloc((sourcesize+1)*sizeof(int64_t)))==NULL)
 		return -1;
 
-	if((req.buffer=stream->malloc(newsize+1))==NULL)
+	if((req.buffer=stream->malloc(targetsize+1))==NULL)
 	{
 		stream->free(req.I);
 		return -1;
 	}
 
-	req.old = old;
-	req.oldsize = oldsize;
-	req.new = new;
-	req.newsize = newsize;
+	req.old = source;
+	req.oldsize = sourcesize;
+	req.new = target;
+	req.newsize = targetsize;
 	req.stream = stream;
 
 	result = bsdiff_internal(req);
@@ -360,7 +386,7 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 #include <stdlib.h>
 #include <unistd.h>
 
-static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
+static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size, int type __attribute__((__unused__)))
 {
 	int bz2err;
 	BZFILE* bz2;
