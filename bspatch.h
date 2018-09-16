@@ -30,10 +30,14 @@
 
 # include <stdint.h>
 
+#define BSDIFF_READCONTROL 0
+#define BSDIFF_READDIFF    1
+#define BSDIFF_READEXTRA   2
+
 struct bspatch_stream
 {
 	void* opaque;
-	int (*read)(const struct bspatch_stream* stream, void* buffer, int length);
+	int (*read)(const struct bspatch_stream* stream, void* buffer, int length, int type);
 };
 
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream);
