@@ -34,10 +34,14 @@
 extern "C" {
 #endif 
 
+#define BSDIFF_READCONTROL 0
+#define BSDIFF_READDIFF    1
+#define BSDIFF_READEXTRA   2
+
 struct bspatch_stream
 {
 	void* opaque;
-	int (*read)(const struct bspatch_stream* stream, void* buffer, int length);
+	int (*read)(const struct bspatch_stream* stream, void* buffer, int length, int type);
 };
 
 int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t targetsize, struct bspatch_stream* stream);

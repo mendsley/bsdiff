@@ -56,7 +56,7 @@ int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t 
 	while(newpos<targetsize) {
 		/* Read control data */
 		for(i=0;i<=2;i++) {
-			if (stream->read(stream, buf, 8))
+			if (stream->read(stream, buf, 8, BSDIFF_READCONTROL))
 				return -1;
 			ctrl[i]=offtin(buf);
 		};
@@ -66,7 +66,7 @@ int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t 
 			return -1;
 
 		/* Read diff string */
-		if (stream->read(stream, target + newpos, ctrl[0]))
+		if (stream->read(stream, target + newpos, ctrl[0], BSDIFF_READDIFF))
 			return -1;
 
 		/* Add old data to diff string */
@@ -83,7 +83,7 @@ int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t 
 			return -1;
 
 		/* Read extra string */
-		if (stream->read(stream, target + newpos, ctrl[1]))
+		if (stream->read(stream, target + newpos, ctrl[1], BSDIFF_READEXTRA))
 			return -1;
 
 		/* Adjust pointers */
@@ -107,7 +107,7 @@ int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t 
 #include <unistd.h>
 #include <fcntl.h>
 
-static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length)
+static int bz2_read(const struct bspatch_stream* stream, void* buffer, int length, int type __attribute__((__unused__)))
 {
 	int n;
 	int bz2err;
