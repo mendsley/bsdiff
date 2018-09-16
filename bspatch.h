@@ -30,6 +30,10 @@
 
 # include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif 
+
 #define BSDIFF_READCONTROL 0
 #define BSDIFF_READDIFF    1
 #define BSDIFF_READEXTRA   2
@@ -40,7 +44,11 @@ struct bspatch_stream
 	int (*read)(const struct bspatch_stream* stream, void* buffer, int length, int type);
 };
 
-int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, struct bspatch_stream* stream);
+int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target, int64_t targetsize, struct bspatch_stream* stream);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

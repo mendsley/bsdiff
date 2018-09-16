@@ -294,7 +294,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				lenb-=lens;
 			};
 
-  		ctrlnext[0]=lenf;
+			ctrlnext[0]=lenf;
 			ctrlnext[1]=(scan-lenb)-(lastscan+lenf);
 			ctrlnext[2]=(pos-lenb)-(lastpos+lenf);
 			
@@ -340,7 +340,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 		offtout(ctrlcur[2],buf+16);
 
 		/* Write control data */
-		if (writedata(req.stream, buf, sizeof(buf)))
+		if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
 			return -1;
 	};
 
