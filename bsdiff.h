@@ -31,6 +31,10 @@
 # include <stddef.h>
 # include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct bsdiff_stream
 {
 	void* opaque;
@@ -40,6 +44,10 @@ struct bsdiff_stream
 	int (*write)(struct bsdiff_stream* stream, const void* buffer, int size);
 };
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream);
+int bsdiff(const uint8_t* source, int64_t sourcesize, const uint8_t* target, int64_t targetsize, struct bsdiff_stream* stream);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
