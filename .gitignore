@@ -1,3 +1,4 @@
+*.*.sw*
 .deps/*
 .libs/*
 *.lo
@@ -9,3 +10,20 @@ NEWS
 README
 ChangeLog
 COPYING
+INSTALL
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.h
+config.h.in
+config.log
+config.status
+configure
+depcomp
+install-sh
+missing
+stamp-h1
+/bsdiff
+/bspatch

@@ -373,6 +373,25 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 	return 0;
 }
 
+static off_t readFileToBuffer(int fd, uint8_t* buffer, off_t bufferSize)
+{
+    off_t bytesRead = 0;
+    int ret;
+    while (bytesRead < bufferSize)
+    {
+        ret = read(fd, buffer + bytesRead, bufferSize - bytesRead);
+        if (ret > 0)
+        {
+            bytesRead += ret;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return bytesRead;
+}
+
 int main(int argc,char *argv[])
 {
 	int fd;
@@ -397,7 +416,7 @@ int main(int argc,char *argv[])
 		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
 		((old=malloc(oldsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
+		(readFileToBuffer(fd,old,oldsize)!=oldsize) ||
 		(close(fd)==-1)) err(1,"%s",argv[1]);
 
 
@@ -407,7 +426,7 @@ int main(int argc,char *argv[])
 		((newsize=lseek(fd,0,SEEK_END))==-1) ||
 		((new=malloc(newsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,new,newsize)!=newsize) ||
+		(readFileToBuffer(fd,new,newsize)!=newsize) ||
 		(close(fd)==-1)) err(1,"%s",argv[2]);
 
 	/* Create the patch file */
