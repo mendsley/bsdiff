@@ -9,3 +9,6 @@ bspatch_CFLAGS = -DBSPATCH_EXECUTABLE
 
 EXTRA_DIST = bsdiff.h bspatch.h
 
+include_HEADERS=bsdiff.h bspatch.h
+lib_LTLIBRARIES=libbsdiff.la
+libbsdiff_la_SOURCES=bsdiff.c bspatch.c
