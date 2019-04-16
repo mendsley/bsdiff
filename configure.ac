@@ -7,6 +7,10 @@ AC_CONFIG_SRCDIR([bsdiff.c])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([1.9])
 
+# Check for libtool
+AC_CONFIG_MACRO_DIR([m4])
+AC_PROG_LIBTOOL
+
 # Checks for programs.
 AC_PROG_CC
 
