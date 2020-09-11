@@ -62,7 +62,9 @@ int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new, int64_t newsize, 
 		};
 
 		/* Sanity-check */
-		if(newpos+ctrl[0]>newsize)
+		if (ctrl[0]<0 || ctrl[0]>INT_MAX ||
+			ctrl[1]<0 || ctrl[1]>INT_MAX ||
+			newpos+ctrl[0]>newsize)
 			return -1;
 
 		/* Read diff string */
