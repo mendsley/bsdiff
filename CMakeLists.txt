@@ -5,7 +5,7 @@ project (
     LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
-add_compile_options("-Wall" "-Wpedantic" "-Wextra" "-g" )
+add_compile_options("-Wall" "-Wpedantic" "-Wextra")
 
 find_package(BZip2)
 include_directories(${BZIP2_INCLUDE_DIR})
@@ -20,5 +20,3 @@ target_link_libraries(bsdiff ${BZIP2_LIBRARIES})
 add_executable(bspatch bspatch.c)
 target_compile_definitions(bspatch PRIVATE BSPATCH_EXECUTABLE)
 target_link_libraries(bspatch ${BZIP2_LIBRARIES})
-
-
