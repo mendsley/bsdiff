@@ -1,30 +1,32 @@
 bsdiff/bspatch
-==============
+=====
 bsdiff and bspatch are libraries for building and applying patches to binary
 files.
 
-The original algorithm and implementation was developed by Colin Percival.  The
-algorithm is detailed in his paper, [Naïve Differences of Executable Code](http://www.daemonology.net/papers/bsdiff.pdf).  For more information, visit his
-website at <http://www.daemonology.net/bsdiff/>.
+The original algorithm and implementation was developed by Colin Percival.
+The algorithm is detailed in his paper, [Naïve Differences of Executable Code](http://www.daemonology.net/papers/bsdiff.pdf).
+For more information, visit his website at <http://www.daemonology.net/bsdiff/>.
 
-I maintain this project separately from Colin's work, with the goal of making
-the core functionality easily embeddable in existing projects.
+[@MatthewEndsley](https://twitter.com/#!/MatthewEndsley) maintained this project
+separately from Colin's work, with the goal of making the core functionality
+easily embeddable in existing projects. Since Matthew no longer maintains his
+project, I took over with the original goal.
 
 Contact
--------
-[@MatthewEndsley](https://twitter.com/#!/MatthewEndsley)  
-<https://github.com/mendsley/bsdiff>
+-----
+<https://github.com/drake127>
 
 License
--------
-Copyright 2003-2005 Colin Percival  
-Copyright 2012 Matthew Endsley
+-----
+Copyright 2003-2005 Colin Percival   
+Copyright 2012-2018 Matthew Endsley  
+Copyright 2018-2020 Emanuel Komínek
 
 This project is governed by the BSD 2-clause license. For details see the file
 titled LICENSE in the project root folder.
 
 Overview
---------
+-----
 There are two separate libraries in the project, bsdiff and bspatch. Each are
 self contained in bsdiff.c and bspatch.c The easiest way to integrate is to
 simply copy the c file to your source folder and build it.
@@ -36,17 +38,22 @@ functionality.
 I've exposed relevant functions via the `_stream` classes. The only external
 dependency not exposed is `memcmp` in `bsdiff`.
 
-This library generates patches that are not compatible with the original bsdiff
-tool. The incompatibilities were motivated by the patching needs for the game
-AirMech <https://www.carbongames.com> and the following requirements:
+This executable generates patches that are not compatible with the original
+bsdiff tool. The incompatibilities were motivated by the patching needs for the
+game AirMech <https://www.carbongames.com> and the following requirements:
 
 * Eliminate/minimize any seek operations when applying patches
 * Eliminate any required disk I/O and support embedded streams
-* Ability to easily embed the routines as a library instead of an external binary
-* Compile+run on all platforms we use to build the game (Windows, Linux, NaCl, OSX)
+* Ability to easily embed the routines as a library instead of an external
+  binary
+* Compile+run on all platforms we use to build the game (Windows, Linux, NaCl,
+  OSX)
+
+These incompatibilities also have adverse effect on patch size. Fortunately it's
+possible to use this project in both modes when used as a library.
 
 Compiling
----------
+-----
 The libraries should compile warning free in any moderately recent version of
 gcc. The project uses `<stdint.h>` which is technically a C99 file and not
 available in Microsoft Visual Studio. The easiest solution here is to use the
@@ -59,7 +66,7 @@ remove the header from the bsdiff/bspatch files and provide your own typedefs
 for the following symbols: `uint8_t`, `uint64_t` and `int64_t`.
 
 Examples
---------
+-----
 Each project has an optional main function that serves as an example for using
 the library. Simply defined `BSDIFF_EXECUTABLE` or `BSPATCH_EXECUTABLE` to
 enable building the standalone tools.
@@ -68,13 +75,17 @@ Reference
 ---------
 ### bsdiff
 
-	struct bsdiff_stream
+	#define BSDIFF_WRITECONTROL 0
+	#define BSDIFF_WRITEDIFF    1
+	#define BSDIFF_WRITEEXTRA   2
+	
+    struct bsdiff_stream
 	{
 		void* opaque;
 		void* (*malloc)(size_t size);
 		void  (*free)(void* ptr);
 		int   (*write)(struct bsdiff_stream* stream,
-					   const void* buffer, int size);
+					   const void* buffer, int size, int type);
 	};
 
 	int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new,
@@ -101,11 +112,15 @@ compress output data.
 
 ### bspatch
 
-	struct bspatch_stream
+	#define BSDIFF_READCONTROL 0
+	#define BSDIFF_READDIFF    1
+	#define BSDIFF_READEXTRA   2 
+    
+    struct bspatch_stream
 	{
 		void* opaque;
 		int (*read)(const struct bspatch_stream* stream,
-		            void* buffer, int length);
+		            void* buffer, int length, int type);
 	};
 
 	int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new,
