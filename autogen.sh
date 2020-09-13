@@ -1,3 +1,3 @@
 #!/bin/sh
 
-autoreconf -vif
+autoreconf -fis
