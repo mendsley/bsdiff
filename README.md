@@ -88,8 +88,8 @@ Reference
 					   const void* buffer, int size, int type);
 	};
 
-	int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new,
-	           int64_t newsize, struct bsdiff_stream* stream);
+	int bsdiff(const uint8_t* source, int64_t sourcesize, const uint8_t* target,
+	           int64_t targetsize, struct bsdiff_stream* stream);
 		
 
 In order to use `bsdiff`, you need to define functions for allocating memory and
@@ -123,8 +123,8 @@ compress output data.
 		            void* buffer, int length, int type);
 	};
 
-	int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* new,
-	            int64_t newsize, struct bspatch_stream* stream);
+	int bspatch(const uint8_t* source, int64_t sourcesize, uint8_t* target,
+	            int64_t targetsize, struct bspatch_stream* stream);
 
 The `bspatch` function transforms the data for a file using data generated from
 `bsdiff`. The caller takes care of loading the old file and allocating space for
