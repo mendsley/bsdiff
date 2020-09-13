@@ -1,6 +1,7 @@
 /*-
  * Copyright 2003-2005 Colin Percival
- * Copyright 2012 Matthew Endsley
+ * Copyright 2012-2018 Matthew Endsley
+ * Copyright 2018-2020 Emanuel Komínek
  * All rights reserved
  *
  * Redistribution and use in source and binary forms, with or without
