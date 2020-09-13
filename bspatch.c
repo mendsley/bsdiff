@@ -1,4 +1,4 @@
-/*-
+﻿/*-
  * Copyright 2003-2005 Colin Percival
  * Copyright 2012 Matthew Endsley
  * All rights reserved
@@ -25,6 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <limits.h>
 #include "bspatch.h"
 
 static int64_t offtin(uint8_t *buf)
