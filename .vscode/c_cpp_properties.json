@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "intelliSenseMode": "gcc-x64",
+            "defines": [
+                "BSDIFF_EXECUTABLE",
+                "BSPATCH_EXECUTABLE"
+            ]
+        }
+    ],
+    "version": 4
+}
