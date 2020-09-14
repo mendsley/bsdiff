@@ -1,8 +1,1 @@
-/bsdiff
-/bspatch
-/libbsdiff.a
-
-/CMakeFiles/
-/CMakeCache.txt
-/cmake_install.cmake
-/Makefile
+/build
