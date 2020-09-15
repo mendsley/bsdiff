@@ -1,0 +1,32 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-16.04
+    defaults:
+      env:
+        BUILD_TYPE: Release
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout Sources.
+      uses: actions/checkout@v2
+
+    - name: Create Environment
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure CMake
+      working-directory: ${{runner.workspace}}/build
+      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Build Sources
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build .
