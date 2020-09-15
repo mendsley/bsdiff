@@ -221,8 +221,8 @@ static int bsdiff_internal(const struct bsdiff_request req)
 {
 	int64_t *I,*V;
 	int64_t scan,pos,len;
-	int64_t lastscan,lastpos,lastoffset;
-	int64_t ctrlcur[3],ctrlnext[3];
+	int64_t lastscan,lastpos,lastoffset,lastwrittenscan,lastwrittenpos;
+	int64_t ctrlcur[3], ctrlnext[3];
 	int64_t oldscore,scsc;
 	int64_t s,Sf,lenf,Sb,lenb;
 	int64_t overlap,Ss,lens;
@@ -240,7 +240,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;pos=0;
-	lastscan=0;lastpos=0;lastoffset=0;
+	lastscan=0;lastpos=0;lastoffset=lastwrittenscan=lastwrittenpos=0;
 	ctrlcur[0]=0;ctrlcur[1]=0;ctrlcur[2]=0;
 	while(scan<req.newsize) {
 		oldscore=0;
@@ -307,6 +307,21 @@ static int bsdiff_internal(const struct bsdiff_request req)
 					/* Write control data */
 					if (writedata(req.stream, buf, sizeof(buf)))
 						return -1;
+
+					/* Write diff data */
+					for(i=0;i<ctrlcur[0];i++)
+						buffer[i]=req.new[lastwrittenscan+i]-req.old[lastwrittenpos+i];
+					if (writedata(req.stream, buffer, ctrlcur[0]))
+						return -1;
+
+					/* Write extra data */
+					for(i=0;i<ctrlcur[1];i++)
+						buffer[i]=req.new[lastwrittenscan+ctrlcur[0]+i];
+					if (writedata(req.stream, buffer, ctrlcur[1]))
+						return -1;
+
+					lastwrittenscan=lastscan;
+					lastwrittenpos=lastpos;
 				};
 				ctrlcur[0]=ctrlnext[0];
 				ctrlcur[1]=ctrlnext[1];
@@ -316,17 +331,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				ctrlcur[2]+=ctrlnext[2];
 			};
 
-			/* Write diff data */
-			for(i=0;i<lenf;i++)
-				buffer[i]=req.new[lastscan+i]-req.old[lastpos+i];
-			if (writedata(req.stream, buffer, lenf))
-				return -1;
-
-			/* Write extra data */
-			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
-				buffer[i]=req.new[lastscan+lenf+i];
-			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf)))
-				return -1;
 
 			lastscan=scan-lenb;
 			lastpos=pos-lenb;
@@ -341,6 +345,18 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 		/* Write control data */
 		if (writedata(req.stream, buf, sizeof(buf)))
+			return -1;
+
+		/* Write diff data */
+		for(i=0;i<ctrlcur[0];i++)
+			buffer[i]=req.new[lastwrittenscan+i]-req.old[lastwrittenpos+i];
+		if (writedata(req.stream, buffer, ctrlcur[0]))
+			return -1;
+
+		/* Write extra data */
+		for(i=0;i<ctrlcur[1];i++)
+			buffer[i]=req.new[lastwrittenscan+ctrlcur[0]+i];
+		if (writedata(req.stream, buffer, ctrlcur[1]))
 			return -1;
 	};
 
