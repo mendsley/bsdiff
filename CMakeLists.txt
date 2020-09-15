@@ -12,9 +12,11 @@ add_compile_options("-Wall" "-Wpedantic" "-Wextra" "-Werror")
 find_package(BZip2 REQUIRED)
 include_directories(${BZIP2_INCLUDE_DIR})
 
-# Builds bsdiff library.
-add_library (libbsdiff bsdiff.c bspatch.c)
-set_target_properties(libbsdiff PROPERTIES PREFIX "")
+# Builds bsdiff libraries.
+add_library (static_bsdiff bsdiff.c bspatch.c)
+set_target_properties(static_bsdiff PROPERTIES OUTPUT_NAME bsdiff)
+add_library (shared_bsdiff SHARED bsdiff.c bspatch.c)
+set_target_properties(shared_bsdiff PROPERTIES OUTPUT_NAME bsdiff)
 
 # Builds bsdiff.
 add_executable(bsdiff bsdiff.c)
