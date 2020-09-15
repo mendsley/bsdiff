@@ -3,10 +3,12 @@
         {
             "name": "Linux",
             "intelliSenseMode": "gcc-x64",
+            "includePath": ["/usr/include", "/usr/include/x86_64-linux-gnu"],
             "defines": [
                 "BSDIFF_EXECUTABLE",
                 "BSPATCH_EXECUTABLE"
-            ]
+            ],
+            "configurationProvider": "ms-vscode.cmake-tools"
         }
     ],
     "version": 4
