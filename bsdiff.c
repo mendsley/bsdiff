@@ -223,7 +223,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	int64_t *I,*V;
 	int64_t scan,pos,len;
 	int64_t lastscan,lastpos,lastoffset;
-	int64_t ctrlcur[3],ctrlnext[3];
 	int64_t oldscore,scsc;
 	int64_t s,Sf,lenf,Sb,lenb;
 	int64_t overlap,Ss,lens;
@@ -242,7 +241,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	/* Compute the differences, writing ctrl as we go */
 	scan=0;len=0;pos=0;
 	lastscan=0;lastpos=0;lastoffset=0;
-	ctrlcur[0]=0;ctrlcur[1]=0;ctrlcur[2]=0;
 	while(scan<req.newsize) {
 		oldscore=0;
 
@@ -295,27 +293,13 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				lenb-=lens;
 			};
 
-			ctrlnext[0]=lenf;
-			ctrlnext[1]=(scan-lenb)-(lastscan+lenf);
-			ctrlnext[2]=(pos-lenb)-(lastpos+lenf);
-			
-			if (ctrlnext[0]) {
-				if (ctrlcur[0]||ctrlcur[1]||ctrlcur[2]) {
-					offtout(ctrlcur[0],buf);
-					offtout(ctrlcur[1],buf+8);
-					offtout(ctrlcur[2],buf+16);
+			offtout(lenf,buf);
+			offtout((scan-lenb)-(lastscan+lenf),buf+8);
+			offtout((pos-lenb)-(lastpos+lenf),buf+16);
 
-					/* Write control data */
-					if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
-						return -1;
-				};
-				ctrlcur[0]=ctrlnext[0];
-				ctrlcur[1]=ctrlnext[1];
-				ctrlcur[2]=ctrlnext[2];
-			} else {
-				ctrlcur[1]+=ctrlnext[1];
-				ctrlcur[2]+=ctrlnext[2];
-			};
+			/* Write control data */
+			if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
+				return -1;
 
 			/* Write diff data */
 			for(i=0;i<lenf;i++)
@@ -333,16 +317,6 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			lastpos=pos-lenb;
 			lastoffset=pos-scan;
 		};
-	};
-
-	if (ctrlcur[0]||ctrlcur[1]) {
-		offtout(ctrlcur[0],buf);
-		offtout(ctrlcur[1],buf+8);
-		offtout(ctrlcur[2],buf+16);
-
-		/* Write control data */
-		if (writedata(req.stream, buf, sizeof(buf), BSDIFF_WRITECONTROL))
-			return -1;
 	};
 
 	return 0;
