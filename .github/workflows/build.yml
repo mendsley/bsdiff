@@ -1,5 +1,8 @@
 name: Build & Test
 
+env:
+  BUILD_TYPE: Release
+
 on:
   push:
     branches:
@@ -11,8 +14,6 @@ jobs:
     name: Build
     runs-on: ubuntu-16.04
     defaults:
-      env:
-        BUILD_TYPE: Release
       run:
         shell: bash
 
