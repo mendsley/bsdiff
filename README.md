@@ -1,4 +1,4 @@
-bsdiff/bspatch
+bsdiff/bspatch ![Build](https://github.com/drake127/bsdiff/workflows/Build%20&%20Test/badge.svg)
 =====
 bsdiff and bspatch are libraries for building and applying patches to binary
 files.
