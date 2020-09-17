@@ -1,4 +1,4 @@
-/*-
+﻿/*-
  * Copyright 2003-2005 Colin Percival
  * Copyright 2012-2018 Matthew Endsley
  * Copyright 2018-2020 Emanuel Komínek
@@ -393,16 +393,23 @@ int bsdiff(const uint8_t* source, int64_t sourcesize, const uint8_t* target, int
 
 #if defined(BSDIFF_EXECUTABLE)
 
-#include <sys/types.h>
-
 #include <bzlib.h>
-#include <err.h>
-#include <fcntl.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <sys/stat.h>
 
-static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size, int type __attribute__((__unused__)))
+void err(int eval, const char * fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+	exit(eval);
+}
+#define errx err
+
+static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size, int type)
 {
 	int bz2err;
 	BZFILE* bz2;
@@ -417,7 +424,7 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size,
 
 int main(int argc,char *argv[])
 {
-	int fd;
+	FILE * fd;
 	int bz2err;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
@@ -435,25 +442,27 @@ int main(int argc,char *argv[])
 
 	/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
 		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[1],O_RDONLY,0))<0) ||
-		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
+	if(((fd=fopen(argv[1],"rb"))==NULL) ||
+		(fseek(fd,0,SEEK_END)==-1) ||
+		((oldsize=ftell(fd))==-1) ||
 		((old=malloc(oldsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[1]);
+		(fseek(fd,0,SEEK_SET)!=0) ||
+		(fread(old,1,oldsize,fd)!=(size_t)oldsize) ||
+		(fclose(fd)==-1)) err(1,"%s",argv[1]);
 
 
 	/* Allocate newsize+1 bytes instead of newsize bytes to ensure
 		that we never try to malloc(0) and get a NULL pointer */
-	if(((fd=open(argv[2],O_RDONLY,0))<0) ||
-		((newsize=lseek(fd,0,SEEK_END))==-1) ||
+	if(((fd=fopen(argv[2],"rb"))==NULL) ||
+		(fseek(fd,0,SEEK_END)==-1) ||
+		((newsize=ftell(fd))==-1) ||
 		((new=malloc(newsize+1))==NULL) ||
-		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,new,newsize)!=newsize) ||
-		(close(fd)==-1)) err(1,"%s",argv[2]);
+		(fseek(fd,0,SEEK_SET)!=0) ||
+		(fread(new,1,newsize,fd)!=(size_t)newsize) ||
+		(fclose(fd)==-1)) err(1,"%s",argv[2]);
 
 	/* Create the patch file */
-	if ((pf = fopen(argv[3], "w")) == NULL)
+	if ((pf = fopen(argv[3], "wb")) == NULL)
 		err(1, "%s", argv[3]);
 
 	/* Write header (signature+newsize)*/
