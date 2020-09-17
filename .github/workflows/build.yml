@@ -31,3 +31,11 @@ jobs:
     - name: Build Sources
       working-directory: ${{runner.workspace}}/build
       run: cmake --build .
+
+    - name: Test
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        ./bsdiff  bsdiff bspatch patch.0
+        ./bspatch bsdiff bspatch2 patch.0
+        cmp -s bspatch bspatch2
+ 
