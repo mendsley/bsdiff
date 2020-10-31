@@ -124,6 +124,44 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
 	return 0;
 }
 
+static off_t readFileToBuffer(int fd, uint8_t* buffer, off_t bufferSize)
+{
+    off_t bytesRead = 0;
+    int ret;
+    while (bytesRead < bufferSize)
+    {
+        ret = read(fd, buffer + bytesRead, bufferSize - bytesRead);
+        if (ret > 0)
+        {
+            bytesRead += ret;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return bytesRead;
+}
+
+static off_t writeFileFromBuffer(int fd, uint8_t* buffer, off_t bufferSize)
+{
+    off_t bytesWritten = 0;
+    int ret;
+    while (bytesWritten < bufferSize)
+    {
+        ret = write(fd, buffer + bytesWritten, bufferSize - bytesWritten);
+        if (ret > 0)
+        {
+            bytesWritten += ret;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return bytesWritten;
+}
+
 int main(int argc,char * argv[])
 {
 	FILE * f;
@@ -163,7 +201,7 @@ int main(int argc,char * argv[])
 		((oldsize=lseek(fd,0,SEEK_END))==-1) ||
 		((old=malloc(oldsize+1))==NULL) ||
 		(lseek(fd,0,SEEK_SET)!=0) ||
-		(read(fd,old,oldsize)!=oldsize) ||
+		(readFileToBuffer(fd,old,oldsize)!=oldsize) ||
 		(fstat(fd, &sb)) ||
 		(close(fd)==-1)) err(1,"%s",argv[1]);
 	if((new=malloc(newsize+1))==NULL) err(1,NULL);
@@ -182,7 +220,7 @@ int main(int argc,char * argv[])
 
 	/* Write the new file */
 	if(((fd=open(argv[2],O_CREAT|O_TRUNC|O_WRONLY,sb.st_mode))<0) ||
-		(write(fd,new,newsize)!=newsize) || (close(fd)==-1))
+		(writeFileFromBuffer(fd,new,newsize)!=newsize) || (close(fd)==-1))
 		err(1,"%s",argv[2]);
 
 	free(new);
