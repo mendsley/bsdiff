@@ -50,9 +50,9 @@ Compiling
 The libraries should compile warning free in any moderately recent version of
 gcc. The project uses `<stdint.h>` which is technically a C99 file and not
 available in Microsoft Visual Studio. The easiest solution here is to use the
-msinttypes version of stdint.h from <https://code.google.com/p/msinttypes/>.
+msinttypes version of stdint.h from <https://github.com/chemeris/msinttypes/>.
 The direct link for the lazy people is:
-<https://msinttypes.googlecode.com/svn/trunk/stdint.h>.
+<https://raw.githubusercontent.com/chemeris/msinttypes/f9e7c5758ed9e3b9f4b2394de1881c704dd79de0/stdint.h>.
 
 If your compiler does not provide an implementation of `<stdint.h>` you can
 remove the header from the bsdiff/bspatch files and provide your own typedefs
