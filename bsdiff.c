@@ -26,15 +26,18 @@
  */
 
 #include "bsdiff.h"
-
+#include "bscommon.h"
 #include <limits.h>
 #include <string.h>
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
+#define MEDIAN3(a,b,c) (((a)<(b)) ? \
+	((b)<(c) ? (b) : ((a)<(c) ? (c) : (a))) : \
+	((b)>(c) ? (b) : ((a)>(c) ? (c) : (a))))
 
 static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 {
-	int64_t i,j,k,x,tmp,jj,kk;
+	int64_t i,j,k,x,y,z,tmp,jj,kk;
 
 	if(len<16) {
 		for(k=start;k<start+len;k+=j) {
@@ -55,7 +58,20 @@ static void split(int64_t *I,int64_t *V,int64_t start,int64_t len,int64_t h)
 		return;
 	};
 
-	x=V[I[start+len/2]+h];
+	/* Select pivot, algorithm by Bentley & McIlroy */
+	j=start+len/2;
+	k=start+len-1;
+	x=V[I[j]+h];
+	y=V[I[start]+h];
+	z=V[I[k]+h];
+	if(len>40) {  /* Big array: Pseudomedian of 9 */
+		tmp=len/8;
+		x=MEDIAN3(x,V[I[j-tmp]+h],V[I[j+tmp]+h]);
+		y=MEDIAN3(y,V[I[start+tmp]+h],V[I[start+tmp+tmp]+h]);
+		z=MEDIAN3(z,V[I[k-tmp]+h],V[I[k-tmp-tmp]+h]);
+	};  /* Else medium array: Pseudomedian of 3 */
+	x=MEDIAN3(x,y,z);
+
 	jj=0;kk=0;
 	for(i=start;i<start+len;i++) {
 		if(V[I[i]+h]<x) jj++;
@@ -373,13 +389,25 @@ static int bz2_write(struct bsdiff_stream* stream, const void* buffer, int size)
 	return 0;
 }
 
+static int raw_write(struct bsdiff_stream* stream, const void* buffer, int size)
+{
+	int bz2err;
+	int bytes_wrote = fwrite ( buffer, 1, size, (FILE*) stream->opaque );
+	if ( bytes_wrote != size)
+		return -1;
+
+	return 0;
+}
+
 int main(int argc,char *argv[])
 {
+	int use_bz2 = 0; /* Should wwe use bz2 or not ? */
 	int fd;
 	int bz2err;
 	uint8_t *old,*new;
 	off_t oldsize,newsize;
-	uint8_t buf[8];
+	off_t oldchksum, newchksum;
+	BSHeader header;
 	FILE * pf;
 	struct bsdiff_stream stream;
 	BZFILE* bz2;
@@ -387,8 +415,10 @@ int main(int argc,char *argv[])
 	memset(&bz2, 0, sizeof(bz2));
 	stream.malloc = malloc;
 	stream.free = free;
-	stream.write = bz2_write;
-
+	if(use_bz2)
+		stream.write = bz2_write;
+	else
+		stream.write = raw_write;
 	if(argc!=4) errx(1,"usage: %s oldfile newfile patchfile\n",argv[0]);
 
 	/* Allocate oldsize+1 bytes instead of oldsize bytes to ensure
@@ -414,23 +444,36 @@ int main(int argc,char *argv[])
 	if ((pf = fopen(argv[3], "w")) == NULL)
 		err(1, "%s", argv[3]);
 
-	/* Write header (signature+newsize)*/
-	offtout(newsize, buf);
-	if (fwrite("ENDSLEY/BSDIFF43", 16, 1, pf) != 1 ||
-		fwrite(buf, sizeof(buf), 1, pf) != 1)
+	/* Write header (signature+newsize) */
+	strncpy(header.header_txt,HEADER_TXT, sizeof(header.header_txt));
+	offtout(newsize, header.new_size);
+	offtout(oldsize, header.old_size);
+	/* TODO Write out checksums */
+	offtout(newchksum, header.new_chksum);
+	offtout(oldchksum, header.old_chksum);
+
+	if(	fwrite(&header,sizeof(header),1,pf) != 1)
 		err(1, "Failed to write header");
 
+	if(use_bz2)
+	{
+		if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
+			errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
+		stream.opaque = bz2;			
+	}
+	else{
+		stream.opaque = pf;
+	}
 
-	if (NULL == (bz2 = BZ2_bzWriteOpen(&bz2err, pf, 9, 0, 0)))
-		errx(1, "BZ2_bzWriteOpen, bz2err=%d", bz2err);
-
-	stream.opaque = bz2;
 	if (bsdiff(old, oldsize, new, newsize, &stream))
 		err(1, "bsdiff");
 
-	BZ2_bzWriteClose(&bz2err, bz2, 0, NULL, NULL);
-	if (bz2err != BZ_OK)
-		err(1, "BZ2_bzWriteClose, bz2err=%d", bz2err);
+	if(use_bz2)
+	{
+		BZ2_bzWriteClose(&bz2err, bz2, 0, NULL, NULL);
+		if (bz2err != BZ_OK)
+			err(1, "BZ2_bzWriteClose, bz2err=%d", bz2err);
+	}
 
 	if (fclose(pf))
 		err(1, "fclose");
