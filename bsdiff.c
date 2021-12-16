@@ -208,9 +208,9 @@ static int64_t writedata(struct bsdiff_stream* stream, const void* buffer, int64
 
 struct bsdiff_request
 {
-	const uint8_t* old;
+	const uint8_t* oldbuffer;
 	int64_t oldsize;
-	const uint8_t* new;
+	const uint8_t* newbuffer;
 	int64_t newsize;
 	struct bsdiff_stream* stream;
 	int64_t *I;
@@ -232,7 +232,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	if((V=req.stream->malloc((req.oldsize+1)*sizeof(int64_t)))==NULL) return -1;
 	I = req.I;
 
-	qsufsort(I,V,req.old,req.oldsize);
+	qsufsort(I,V,req.oldbuffer,req.oldsize);
 	req.stream->free(V);
 
 	buffer = req.buffer;
@@ -244,26 +244,26 @@ static int bsdiff_internal(const struct bsdiff_request req)
 		oldscore=0;
 
 		for(scsc=scan+=len;scan<req.newsize;scan++) {
-			len=search(I,req.old,req.oldsize,req.new+scan,req.newsize-scan,
+			len=search(I,req.oldbuffer,req.oldsize,req.newbuffer+scan,req.newsize-scan,
 					0,req.oldsize,&pos);
 
 			for(;scsc<scan+len;scsc++)
 			if((scsc+lastoffset<req.oldsize) &&
-				(req.old[scsc+lastoffset] == req.new[scsc]))
+				(req.oldbuffer[scsc+lastoffset] == req.newbuffer[scsc]))
 				oldscore++;
 
 			if(((len==oldscore) && (len!=0)) || 
 				(len>oldscore+8)) break;
 
 			if((scan+lastoffset<req.oldsize) &&
-				(req.old[scan+lastoffset] == req.new[scan]))
+				(req.oldbuffer[scan+lastoffset] == req.newbuffer[scan]))
 				oldscore--;
 		};
 
 		if((len!=oldscore) || (scan==req.newsize)) {
 			s=0;Sf=0;lenf=0;
 			for(i=0;(lastscan+i<scan)&&(lastpos+i<req.oldsize);) {
-				if(req.old[lastpos+i]==req.new[lastscan+i]) s++;
+				if(req.oldbuffer[lastpos+i]==req.newbuffer[lastscan+i]) s++;
 				i++;
 				if(s*2-i>Sf*2-lenf) { Sf=s; lenf=i; };
 			};
@@ -272,7 +272,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 			if(scan<req.newsize) {
 				s=0;Sb=0;
 				for(i=1;(scan>=lastscan+i)&&(pos>=i);i++) {
-					if(req.old[pos-i]==req.new[scan-i]) s++;
+					if(req.oldbuffer[pos-i]==req.newbuffer[scan-i]) s++;
 					if(s*2-i>Sb*2-lenb) { Sb=s; lenb=i; };
 				};
 			};
@@ -281,10 +281,10 @@ static int bsdiff_internal(const struct bsdiff_request req)
 				overlap=(lastscan+lenf)-(scan-lenb);
 				s=0;Ss=0;lens=0;
 				for(i=0;i<overlap;i++) {
-					if(req.new[lastscan+lenf-overlap+i]==
-					   req.old[lastpos+lenf-overlap+i]) s++;
-					if(req.new[scan-lenb+i]==
-					   req.old[pos-lenb+i]) s--;
+					if(req.newbuffer[lastscan+lenf-overlap+i]==
+					   req.oldbuffer[lastpos+lenf-overlap+i]) s++;
+					if(req.newbuffer[scan-lenb+i]==
+					   req.oldbuffer[pos-lenb+i]) s--;
 					if(s>Ss) { Ss=s; lens=i+1; };
 				};
 
@@ -302,13 +302,13 @@ static int bsdiff_internal(const struct bsdiff_request req)
 
 			/* Write diff data */
 			for(i=0;i<lenf;i++)
-				buffer[i]=req.new[lastscan+i]-req.old[lastpos+i];
+				buffer[i]=req.newbuffer[lastscan+i]-req.oldbuffer[lastpos+i];
 			if (writedata(req.stream, buffer, lenf))
 				return -1;
 
 			/* Write extra data */
 			for(i=0;i<(scan-lenb)-(lastscan+lenf);i++)
-				buffer[i]=req.new[lastscan+lenf+i];
+				buffer[i]=req.newbuffer[lastscan+lenf+i];
 			if (writedata(req.stream, buffer, (scan-lenb)-(lastscan+lenf)))
 				return -1;
 
@@ -321,7 +321,7 @@ static int bsdiff_internal(const struct bsdiff_request req)
 	return 0;
 }
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream)
+int bsdiff(const uint8_t* oldbuffer, int64_t oldsize, const uint8_t* newbuffer, int64_t newsize, struct bsdiff_stream* stream)
 {
 	int result;
 	struct bsdiff_request req;
@@ -335,9 +335,9 @@ int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t news
 		return -1;
 	}
 
-	req.old = old;
+	req.oldbuffer = oldbuffer;
 	req.oldsize = oldsize;
-	req.new = new;
+	req.newbuffer = newbuffer;
 	req.newsize = newsize;
 	req.stream = stream;
 
