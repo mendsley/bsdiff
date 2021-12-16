@@ -40,6 +40,6 @@ struct bsdiff_stream
 	int (*write)(struct bsdiff_stream* stream, const void* buffer, int size);
 };
 
-int bsdiff(const uint8_t* old, int64_t oldsize, const uint8_t* new, int64_t newsize, struct bsdiff_stream* stream);
+int bsdiff(const uint8_t* oldbuffer, int64_t oldsize, const uint8_t* newbuffer, int64_t newsize, struct bsdiff_stream* stream);
 
 #endif
