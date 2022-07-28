@@ -52,6 +52,7 @@ gcc. The project uses `<stdint.h>` which is technically a C99 file and not
 available in Microsoft Visual Studio. The easiest solution here is to use the
 msinttypes version of stdint.h from <https://code.google.com/p/msinttypes/>.
 The direct link for the lazy people is:
+>>> The below Link is not working.
 <https://msinttypes.googlecode.com/svn/trunk/stdint.h>.
 
 If your compiler does not provide an implementation of `<stdint.h>` you can
